@@ -116,12 +116,12 @@ struct Offsets {
     // tagCLS
     // https://www.geoffchappell.com/studies/windows/win32/user32/structs/cls.htm?tx=56
     addr_t atom_cls_name_offset; 
-}; 
+} off; 
 
 
-status_t populate_offsets(vmi_instance_t vmi,struct Offsets* off){ // const char *win32k_config,
+status_t populate_offsets(vmi_instance_t vmi){ // const char *win32k_config,
 
-    if (VMI_FAILURE == vmi_read_addr_ksym(vmi, "PsActiveProcessHead", &off->ps_active_process_head))
+    if (VMI_FAILURE == vmi_read_addr_ksym(vmi, "PsActiveProcessHead", &off.ps_active_process_head))
     {
         printf("Failed to find PsActiveProcessHead\n");
         return VMI_FAILURE;
@@ -131,97 +131,97 @@ status_t populate_offsets(vmi_instance_t vmi,struct Offsets* off){ // const char
     json_object *profile = vmi_get_kernel_json(vmi);
 
     /* Find offsets within _EPROCESS */
-    if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(vmi, profile, "_EPROCESS", "ActiveProcessLinks", &off->active_proc_links_offset))
+    if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(vmi, profile, "_EPROCESS", "ActiveProcessLinks", &off.active_proc_links_offset))
     {
-        printf("Error retrieving ActiveProcessLinks-offset : %ld\n", off->name_offset);
+        printf("Error retrieving ActiveProcessLinks-offset : %ld\n", off.name_offset);
         return VMI_FAILURE;
     }
-    if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(vmi, profile, "_EPROCESS", "UniqueProcessId", &off->pid_offset))
+    if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(vmi, profile, "_EPROCESS", "UniqueProcessId", &off.pid_offset))
     {
-        printf("Error retrieving UniqueProcessId-offset : %ld\n", off->pid_offset);
+        printf("Error retrieving UniqueProcessId-offset : %ld\n", off.pid_offset);
         return VMI_FAILURE;
     }
-    if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(vmi, profile, "_EPROCESS", "ImageFileName", &off->name_offset))
+    if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(vmi, profile, "_EPROCESS", "ImageFileName", &off.name_offset))
     {
-        printf("Error retrieving ImageFileName-offset : %ld\n", off->name_offset);
+        printf("Error retrieving ImageFileName-offset : %ld\n", off.name_offset);
         return VMI_FAILURE;
     }
-    if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(vmi, profile, "_EPROCESS", "ThreadListHead", &off->thread_list_head_offset))
+    if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(vmi, profile, "_EPROCESS", "ThreadListHead", &off.thread_list_head_offset))
     {
-        printf("Error retrieving ThreadListHead-offset : %ld\n", off->thread_list_head_offset);
+        printf("Error retrieving ThreadListHead-offset : %ld\n", off.thread_list_head_offset);
         return VMI_FAILURE;
     }
 
     printf("Relevant _EPROCESS-offsets\n");
-    printf("Offset for ActiveProcessLinks:\t%ld\n", off->active_proc_links_offset);
-    printf("Offset for ImageFileName:\t%ld\n", off->name_offset);
-    printf("Offset for UniqueProcessId:\t%ld\n", off->pid_offset);
-    printf("Offset for ThreadListHead:\t%ld\n", off->thread_list_head_offset);
+    printf("Offset for ActiveProcessLinks:\t%ld\n", off.active_proc_links_offset);
+    printf("Offset for ImageFileName:\t%ld\n", off.name_offset);
+    printf("Offset for UniqueProcessId:\t%ld\n", off.pid_offset);
+    printf("Offset for ThreadListHead:\t%ld\n", off.thread_list_head_offset);
 
-    if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(vmi, profile, "_ETHREAD", "ThreadListEntry", &off->thread_list_entry_offset))
+    if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(vmi, profile, "_ETHREAD", "ThreadListEntry", &off.thread_list_entry_offset))
     {
-        printf("Error retrieving ThreadListEntry-offset : %ld\n", off->thread_list_entry_offset);
+        printf("Error retrieving ThreadListEntry-offset : %ld\n", off.thread_list_entry_offset);
         return VMI_FAILURE;
     }
 
-    if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(vmi, profile, "_ETHREAD", "Tcb", &off->tcb_offset))
+    if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(vmi, profile, "_ETHREAD", "Tcb", &off.tcb_offset))
     {
-        printf("Error retrieving Tcb-offset : %ld\n", off->tcb_offset);
+        printf("Error retrieving Tcb-offset : %ld\n", off.tcb_offset);
         return VMI_FAILURE;
     }
 
     printf("\nRelevant _ETHREAD-offsets\n");
-    printf("Offset for Tcb:\t%ld\n", off->tcb_offset);
-    printf("Offset for ThreadListEntry:\t%ld\n", off->thread_list_entry_offset);
+    printf("Offset for Tcb:\t%ld\n", off.tcb_offset);
+    printf("Offset for ThreadListEntry:\t%ld\n", off.thread_list_entry_offset);
 
-    if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(vmi, profile, "_ETHREAD", "Teb", &off->teb_offset))
+    if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(vmi, profile, "_ETHREAD", "Teb", &off.teb_offset))
     {
-        printf("Error retrieving Teb-offset : %ld\n", off->tcb_offset);
+        printf("Error retrieving Teb-offset : %ld\n", off.tcb_offset);
         return VMI_FAILURE;
     }
 
     printf("\nRelevant _KTHREAD-offsets\n");
-    printf("Offset for Teb:\t%ld\n", off->teb_offset);
+    printf("Offset for Teb:\t%ld\n", off.teb_offset);
 
     /* TODO read from pdb-JSON */
-    off->teb_win32threadinfo_offset = 0x40; 
+    off.teb_win32threadinfo_offset = 0x40; 
     
     // THREADINFO content
-    off->w32t_pwinsta_offset = 264;  // https://github.com/volatilityfoundation/volatility/blob/a438e768194a9e05eb4d9ee9338b881c0fa25937/volatility/plugins/gui/vtypes/win7_sp1_x86_vtypes_gui.py#L199
-    off->w32t_deskinfo_offset = 204; 
+    off.w32t_pwinsta_offset = 264;  // https://github.com/volatilityfoundation/volatility/blob/a438e768194a9e05eb4d9ee9338b881c0fa25937/volatility/plugins/gui/vtypes/win7_sp1_x86_vtypes_gui.py#L199
+    off.w32t_deskinfo_offset = 204; 
     
     // WinSta content
-    off->p_global_atom_table_offset = 64; // https://github.com/volatilityfoundation/volatility/blob/a438e768194a9e05eb4d9ee9338b881c0fa25937/volatility/plugins/gui/vtypes/win7_sp1_x86_vtypes_gui.py#L1583
-    off->rpdesk_list_offset = 8; 
-    off->winsta_wsf_flags = 16, 
+    off.p_global_atom_table_offset = 64; // https://github.com/volatilityfoundation/volatility/blob/a438e768194a9e05eb4d9ee9338b881c0fa25937/volatility/plugins/gui/vtypes/win7_sp1_x86_vtypes_gui.py#L1583
+    off.rpdesk_list_offset = 8; 
+    off.winsta_wsf_flags = 16, 
 
     // tagDesktop
-    off->desk_pdeskinfo_off = 4;
-    off->desk_rpdesk_next_off = 12; 
-    off->desk_pwinsta_parent = 16; 
-    off->desk_desktopid_off = 24; 
+    off.desk_pdeskinfo_off = 4;
+    off.desk_rpdesk_next_off = 12; 
+    off.desk_pwinsta_parent = 16; 
+    off.desk_desktopid_off = 24; 
 
     // DESKTOPINFO content
-    off->spwnd_offset = 0x8; 
+    off.spwnd_offset = 0x8; 
     
     // tagWINDOW content
-    off->rc_wnd_offset = 0x40; 
-    off->rc_wnd_offset = 0x50; 
-    off->spwnd_next = 44;
-    off->spwnd_child = 56;
+    off.rc_wnd_offset = 64; 
+    off.rc_client_offset = 80; 
+    off.spwnd_next = 44;
+    off.spwnd_child = 56;
     // https://www.geoffchappell.com/studies/windows/win32/user32/structs/wnd/style.htm
-    off->wnd_style = 32; 
-    off->wnd_exstyle = 28;
-    off->pcls_offset = 100;
+    off.wnd_style = 32; 
+    off.wnd_exstyle = 28;
+    off.pcls_offset = 100;
     
     // _RECT content
-    off->rect_left_offset = 0;
-    off->rect_top_offset = 4;
-    off->rect_right_offset = 8;
-    off->rect_bottom_offset = 12; 
+    off.rect_left_offset = 0;
+    off.rect_top_offset = 4;
+    off.rect_right_offset = 8;
+    off.rect_bottom_offset = 12; 
 
     // https://www.geoffchappell.com/studies/windows/win32/user32/structs/cls.htm?tx=56
-    off->atom_cls_name_offset = 8;
+    off.atom_cls_name_offset = 8;
     
     return VMI_SUCCESS; 
 }
@@ -266,7 +266,7 @@ void print_as_hex(char* cp, size_t l){
     printf("\n");
 }
 
-status_t draw_single_window(vmi_instance_t vmi, struct Offsets* off, addr_t win, vmi_pid_t pid){
+status_t draw_single_window(vmi_instance_t vmi, addr_t win, vmi_pid_t pid){
     status_t ret = VMI_FAILURE;
     uint32_t x0 = 0;
     uint32_t x1 = 0;
@@ -275,16 +275,16 @@ status_t draw_single_window(vmi_instance_t vmi, struct Offsets* off, addr_t win,
     uint32_t style = 0; 
     uint32_t exstyle = 0;
 
-    ret = vmi_read_32_va(vmi, win + off->rc_wnd_offset + off->rect_left_offset, pid, (uint32_t *)&x0);
-    ret = vmi_read_32_va(vmi, win + off->rc_wnd_offset + off->rect_right_offset, pid, (uint32_t *)&x1);
-    ret = vmi_read_32_va(vmi, win + off->rc_wnd_offset + off->rect_top_offset, pid, (uint32_t *)&y0);
-    ret = vmi_read_32_va(vmi, win + off->rc_wnd_offset + off->rect_bottom_offset, pid, (uint32_t *)&y1);
+    ret = vmi_read_32_va(vmi, win + off.rc_wnd_offset + off.rect_left_offset, pid, (uint32_t *)&x0);
+    ret = vmi_read_32_va(vmi, win + off.rc_wnd_offset + off.rect_right_offset, pid, (uint32_t *)&x1);
+    ret = vmi_read_32_va(vmi, win + off.rc_wnd_offset + off.rect_top_offset, pid, (uint32_t *)&y0);
+    ret = vmi_read_32_va(vmi, win + off.rc_wnd_offset + off.rect_bottom_offset, pid, (uint32_t *)&y1);
     
     /* Determine, if windows is visible */
-    ret = vmi_read_32_va(vmi, win + off->wnd_style, pid, (uint32_t *)&style);
+    ret = vmi_read_32_va(vmi, win + off.wnd_style, pid, (uint32_t *)&style);
 
     /* Determine extended style attributes */
-    ret = vmi_read_32_va(vmi, win + off->wnd_exstyle, pid, (uint32_t *)&exstyle);
+    ret = vmi_read_32_va(vmi, win + off.wnd_exstyle, pid, (uint32_t *)&exstyle);
 
     if((style & WS_VISIBLE) && 
        !(style &WS_DISABLED) &&
@@ -298,10 +298,10 @@ status_t draw_single_window(vmi_instance_t vmi, struct Offsets* off, addr_t win,
         gfx_color(0, 0, 0);
         gfx_rect(x0, y0, x1-x0, y1-y0);
  
-        ret = vmi_read_32_va(vmi, win + off->rc_client_offset + off->rect_left_offset, pid, (uint32_t *)&x0);
-        ret = vmi_read_32_va(vmi, win + off->rc_client_offset + off->rect_right_offset, pid, (uint32_t *)&x1);
-        ret = vmi_read_32_va(vmi, win + off->rc_client_offset + off->rect_top_offset, pid, (uint32_t *)&y0);
-        ret = vmi_read_32_va(vmi, win + off->rc_client_offset + off->rect_bottom_offset, pid, (uint32_t *)&y1);
+        ret = vmi_read_32_va(vmi, win + off.rc_client_offset + off.rect_left_offset, pid, (uint32_t *)&x0);
+        ret = vmi_read_32_va(vmi, win + off.rc_client_offset + off.rect_right_offset, pid, (uint32_t *)&x1);
+        ret = vmi_read_32_va(vmi, win + off.rc_client_offset + off.rect_top_offset, pid, (uint32_t *)&y0);
+        ret = vmi_read_32_va(vmi, win + off.rc_client_offset + off.rect_bottom_offset, pid, (uint32_t *)&y1);
 
         gfx_color(220, 220, 220);
         //gfx_fill_rect(x0, y0, x1-x0, y1-y0);
@@ -313,7 +313,7 @@ status_t draw_single_window(vmi_instance_t vmi, struct Offsets* off, addr_t win,
 }
 
 
-status_t draw_windows(vmi_instance_t vmi, struct Offsets* off, int width, int height, GArray* windows, vmi_pid_t pid)
+status_t draw_windows(vmi_instance_t vmi,int width, int height, GArray* windows, vmi_pid_t pid)
 {
 
     /* Prepare drawing */
@@ -328,7 +328,7 @@ status_t draw_windows(vmi_instance_t vmi, struct Offsets* off, int width, int he
     {   
         wnd_addr = g_array_index(windows, addr_t, i);
         printf("WND Addr %"PRIx64"\n", wnd_addr);
-        draw_single_window(vmi, off, wnd_addr, pid);
+        draw_single_window(vmi, wnd_addr, pid);
     } 
    
     char c = 'a'; 
@@ -343,7 +343,7 @@ status_t draw_windows(vmi_instance_t vmi, struct Offsets* off, int width, int he
     
     return VMI_SUCCESS;
 }
-status_t print_window_pid(vmi_instance_t vmi, struct Offsets *off, addr_t win, vmi_pid_t pid){
+status_t print_window_pid(vmi_instance_t vmi, addr_t win, vmi_pid_t pid){
     status_t ret = VMI_FAILURE;
     unicode_string_t* wnd_name; 
 
@@ -355,15 +355,15 @@ status_t print_window_pid(vmi_instance_t vmi, struct Offsets *off, addr_t win, v
     uint32_t style = 0; 
     uint32_t exstyle = 0;
     
-    ret = vmi_read_32_va(vmi, win + off->rc_wnd_offset + off->rect_left_offset, pid, (uint32_t *)&x0);
-    ret = vmi_read_32_va(vmi, win + off->rc_wnd_offset + off->rect_right_offset, pid, (uint32_t *)&x1);
-    ret = vmi_read_32_va(vmi, win + off->rc_wnd_offset + off->rect_top_offset, pid, (uint32_t *)&y0);
-    ret = vmi_read_32_va(vmi, win + off->rc_wnd_offset + off->rect_bottom_offset, pid, (uint32_t *)&y1);
+    ret = vmi_read_32_va(vmi, win + off.rc_wnd_offset + off.rect_left_offset, pid, (uint32_t *)&x0);
+    ret = vmi_read_32_va(vmi, win + off.rc_wnd_offset + off.rect_right_offset, pid, (uint32_t *)&x1);
+    ret = vmi_read_32_va(vmi, win + off.rc_wnd_offset + off.rect_top_offset, pid, (uint32_t *)&y0);
+    ret = vmi_read_32_va(vmi, win + off.rc_wnd_offset + off.rect_bottom_offset, pid, (uint32_t *)&y1);
     
     /* Determine, if windows is visible */
-    ret = vmi_read_32_va(vmi, win + off->wnd_style, pid, (uint32_t *)&style);
+    ret = vmi_read_32_va(vmi, win + off.wnd_style, pid, (uint32_t *)&style);
     /* Determine extended style attributes */
-    ret = vmi_read_32_va(vmi, win + off->wnd_exstyle, pid, (uint32_t *)&exstyle);
+    ret = vmi_read_32_va(vmi, win + off.wnd_exstyle, pid, (uint32_t *)&exstyle);
 
     if((style & WS_VISIBLE) && 
        !(style &WS_DISABLED) && 
@@ -382,7 +382,7 @@ status_t print_window_pid(vmi_instance_t vmi, struct Offsets *off, addr_t win, v
         // https://github.com/volatilityfoundation/volatility/blob/a438e768194a9e05eb4d9ee9338b881c0fa25937/volatility/plugins/gui/vtypes/win7_sp1_x86_vtypes_gui.py#L981
         if(VMI_FAILURE != vmi_read_addr_va(vmi, win + 132 + 8, pid, &str_name_off)){
             printf("\t\t\tRead strNameOff\n");
-            vmi_read_32_va(vmi, win + off->wnd_style, win + 132 , (uint32_t *)&len);
+            vmi_read_32_va(vmi, win + off.wnd_style, win + 132 , (uint32_t *)&len);
             printf("\t\t\tLength: %d\n", len);
             // Lenght always 0 ...Fix or delete
             // https://github.com/volatilityfoundation/volatility/blob/a438e768194a9e05eb4d9ee9338b881c0fa25937/volatility/plugins/gui/vtypes/win7_sp1_x86_vtypes_gui.py#L650
@@ -400,7 +400,9 @@ status_t print_window_pid(vmi_instance_t vmi, struct Offsets *off, addr_t win, v
     return ret; 
 }
 
-status_t traverse_windows_pid(vmi_instance_t vmi, struct Offsets* off, addr_t* win, vmi_pid_t pid, GHashTable *seen_windows, GArray *result_windows){
+status_t traverse_windows_pid(vmi_instance_t vmi, addr_t *win,
+                              vmi_pid_t pid, GHashTable *seen_windows, GArray *result_windows)
+{
     addr_t* cur = malloc(sizeof(addr_t));
     *cur = *win; 
 
@@ -408,7 +410,7 @@ status_t traverse_windows_pid(vmi_instance_t vmi, struct Offsets* off, addr_t* w
         /* Stores window as result*/
         g_array_append_val(result_windows, *cur);
 
-        print_window_pid(vmi, off, *cur, pid); 
+        print_window_pid(vmi, *cur, pid); 
     
         if(g_hash_table_lookup(seen_windows, (gpointer) cur) != NULL){
             printf("Cycle after %d siblings\n", g_hash_table_size(seen_windows));
@@ -419,7 +421,7 @@ status_t traverse_windows_pid(vmi_instance_t vmi, struct Offsets* off, addr_t* w
         g_hash_table_insert(seen_windows, (gpointer)cur, (gpointer)cur);
 
         addr_t next = 0;
-        if(VMI_FAILURE == vmi_read_addr_va(vmi, *cur + off->spwnd_next, pid, &next))
+        if(VMI_FAILURE == vmi_read_addr_va(vmi, *cur + off.spwnd_next, pid, &next))
             return VMI_FAILURE;
         
         cur = (addr_t*) malloc(sizeof(addr_t));
@@ -436,7 +438,7 @@ status_t traverse_windows_pid(vmi_instance_t vmi, struct Offsets* off, addr_t* w
         uint32_t style = 0;
 
         /* Determine, if windows is visible; important since invisible windows might have visible children */
-        if(VMI_FAILURE == vmi_read_32_va(vmi, *val + off->wnd_style, pid, (uint32_t *)&style))
+        if(VMI_FAILURE == vmi_read_32_va(vmi, *val + off.wnd_style, pid, (uint32_t *)&style))
             return VMI_FAILURE;
         
         if(! (style & WS_VISIBLE))
@@ -446,37 +448,37 @@ status_t traverse_windows_pid(vmi_instance_t vmi, struct Offsets* off, addr_t* w
         
         addr_t *child = malloc(sizeof(uint64_t)); 
         
-        if(VMI_FAILURE == vmi_read_addr_va(vmi, *val + off->spwnd_child, pid, child))
+        if(VMI_FAILURE == vmi_read_addr_va(vmi, *val + off.spwnd_child, pid, child))
             return VMI_FAILURE; 
 
         GHashTable* children = g_hash_table_new(g_int64_hash, g_int64_equal); 
-        traverse_windows_pid(vmi, off, child, pid, children, result_windows);
+        traverse_windows_pid(vmi, child, pid, children, result_windows);
         g_hash_table_destroy(children); 
         
     }   
 
-    return VMI_SUCCESS; 
+    return VMI_SUCCESS;
 }
 
-status_t retrieve_windows_from_desktop_pid(vmi_instance_t vmi, struct Offsets* off, addr_t desktop, vmi_pid_t pid, GArray* result_windows){
+status_t retrieve_windows_from_desktop_pid(vmi_instance_t vmi, addr_t desktop, vmi_pid_t pid, GArray *result_windows)
+{
     uint32_t desk_id = 0; 
 
-
-    addr_t addr = desktop + off->desk_desktopid_off;
+    addr_t addr = desktop + off.desk_desktopid_off;
     // Desktop ID
     if (VMI_FAILURE == vmi_read_32_va(vmi, addr, pid, &desk_id))
     {
-        printf("\t\tFailed to read desktop ID at %" PRIx64 "\n", desktop + off->desk_desktopid_off);
+        printf("\t\tFailed to read desktop ID at %" PRIx64 "\n", desktop + off.desk_desktopid_off);
         return VMI_FAILURE;
     }
     printf("\tRetrieveing Windows for desktop #%"PRIx32"\n", desk_id); 
     
     addr_t desktop_info; 
-    addr = desktop + off->desk_pdeskinfo_off;
+    addr = desktop + off.desk_pdeskinfo_off;
     // Retrieves pointer desktop info struct
     if (VMI_FAILURE == vmi_read_addr_va(vmi, addr, pid, &desktop_info))
     {
-        printf("\t\tFailed to read pointer to _DESKTOPINFO at %" PRIx64 "\n", desktop + off->desk_pdeskinfo_off);
+        printf("\t\tFailed to read pointer to _DESKTOPINFO at %" PRIx64 "\n", desktop + off.desk_pdeskinfo_off);
         return VMI_FAILURE;
     }
 
@@ -484,11 +486,11 @@ status_t retrieve_windows_from_desktop_pid(vmi_instance_t vmi, struct Offsets* o
 
     addr_t spwnd = 0;
 
-    addr = desktop_info + off->spwnd_offset;
+    addr = desktop_info + off.spwnd_offset;
     /* Retrieves pointer to struct pointer window */
     if (VMI_FAILURE == vmi_read_addr_va(vmi, addr, pid, &spwnd))
     {
-        printf("\t\t\tFailed to read pointer to _WINDOW at %" PRIx64 "\n",  desktop_info + off->spwnd_offset);
+        printf("\t\t\tFailed to read pointer to _WINDOW at %" PRIx64 "\n",  desktop_info + off.spwnd_offset);
         return VMI_FAILURE;
     }
 
@@ -507,14 +509,15 @@ status_t retrieve_windows_from_desktop_pid(vmi_instance_t vmi, struct Offsets* o
 
     GHashTable* seen_windows = g_hash_table_new(g_int64_hash, g_int64_equal); 
 
-    traverse_windows_pid(vmi, off, root, pid, seen_windows, result_windows);  
+    traverse_windows_pid(vmi, root, pid, seen_windows, result_windows);  
     g_hash_table_destroy(seen_windows); 
 
     return VMI_SUCCESS;
 }
 
 /* Traverses this singly-linked list of desktops belonging to one WinSta */
-status_t traverse_desktops(vmi_instance_t vmi, struct Offsets* off, addr_t* desktops, size_t* max_len, addr_t list_head)
+status_t traverse_desktops(vmi_instance_t vmi, addr_t *desktops, 
+                            size_t *max_len, addr_t list_head)
 {
     addr_t cur = list_head;
     addr_t next = 0;
@@ -527,9 +530,9 @@ status_t traverse_desktops(vmi_instance_t vmi, struct Offsets* off, addr_t* desk
             desktops[i] = cur;
             i++;
         }
-        if (VMI_FAILURE == vmi_read_addr_va(vmi, cur + off->desk_rpdesk_next_off, 0, &next))
+        if (VMI_FAILURE == vmi_read_addr_va(vmi, cur + off.desk_rpdesk_next_off, 0, &next))
         {
-            printf("Failed to read pointer to next desktop at %" PRIx64 "\n", cur + off->desk_rpdesk_next_off);
+            printf("Failed to read pointer to next desktop at %" PRIx64 "\n", cur + off.desk_rpdesk_next_off);
             *max_len = i; 
             return VMI_FAILURE;
         }
@@ -546,8 +549,9 @@ status_t traverse_desktops(vmi_instance_t vmi, struct Offsets* off, addr_t* desk
 }
 
 /* Reads relevant data from tagWINDOWSTATION-structs and the child tagDESKTOPs */
-status_t populate_winsta(vmi_instance_t vmi, struct Offsets* off, struct winsta_container* winsta, addr_t addr, vmi_pid_t providing_pid){
-    winsta->addr = addr; 
+status_t populate_winsta(vmi_instance_t vmi, struct winsta_container *winsta, addr_t addr, vmi_pid_t providing_pid)
+{
+    winsta->addr = addr;
 
     /* 
      * Do it like volatility: Find a process with matching sessionID and take is VA as _MM_SESSION_SPACE
@@ -555,18 +559,18 @@ status_t populate_winsta(vmi_instance_t vmi, struct Offsets* off, struct winsta_
      */
     winsta->providing_pid = providing_pid;
 
-    if (VMI_FAILURE == vmi_read_addr_va(vmi, addr + off->p_global_atom_table_offset, 0, &winsta->atom_table))
+    if (VMI_FAILURE == vmi_read_addr_va(vmi, addr + off.p_global_atom_table_offset, 0, &winsta->atom_table))
     {
-        printf("Failed to read pointer to atom table at %" PRIx64 "\n", addr + off->p_global_atom_table_offset);
+        printf("Failed to read pointer to atom table at %" PRIx64 "\n", addr + off.p_global_atom_table_offset);
         return VMI_FAILURE;
     }
     printf("\tAtom table at %"PRIx64"\n", winsta->atom_table);
 
     uint32_t wsf_flags = 0; 
     
-    if (VMI_FAILURE == vmi_read_32_va(vmi, addr + off->winsta_wsf_flags, 0, &wsf_flags))
+    if (VMI_FAILURE == vmi_read_32_va(vmi, addr + off.winsta_wsf_flags, 0, &wsf_flags))
     {
-        printf("Failed to read pointer to wsfFlags at %" PRIx64 "\n", addr + off->winsta_wsf_flags);
+        printf("Failed to read pointer to wsfFlags at %" PRIx64 "\n", addr + off.winsta_wsf_flags);
         return VMI_FAILURE;
     }
 
@@ -575,9 +579,9 @@ status_t populate_winsta(vmi_instance_t vmi, struct Offsets* off, struct winsta_
 
     addr_t desk = 0; 
     
-    if (VMI_FAILURE == vmi_read_addr_va(vmi, addr + off->rpdesk_list_offset, 0, &desk))
+    if (VMI_FAILURE == vmi_read_addr_va(vmi, addr + off.rpdesk_list_offset, 0, &desk))
     {
-        printf("Failed to read pointer to rpdesklist at %" PRIx64 "\n", addr + off->rpdesk_list_offset);
+        printf("Failed to read pointer to rpdesklist at %" PRIx64 "\n", addr + off.rpdesk_list_offset);
         return VMI_FAILURE;
     }
 
@@ -585,7 +589,7 @@ status_t populate_winsta(vmi_instance_t vmi, struct Offsets* off, struct winsta_
     winsta->desktops = (addr_t *) malloc(len*sizeof(addr_t)); 
     memset(winsta->desktops, 0 , sizeof(addr_t)*len); 
 
-    if(VMI_FAILURE == traverse_desktops(vmi, off, winsta->desktops, &len, desk))
+    if(VMI_FAILURE == traverse_desktops(vmi, winsta->desktops, &len, desk))
     {
         printf("Failed to traverse desktops of winsta at %" PRIx64 "\n", winsta->addr);
         winsta->len_desktops = len;
@@ -595,15 +599,15 @@ status_t populate_winsta(vmi_instance_t vmi, struct Offsets* off, struct winsta_
 
     printf("\tFound %ld desktops\n", winsta->len_desktops);
     
-    return VMI_SUCCESS; 
+    return VMI_SUCCESS;
 }
 
 /* Iterates over process list an retrieves all tagWINDOWSTATIONS-structs */
-status_t retrieve_winstas_from_procs(vmi_instance_t vmi, struct Offsets* off, struct winsta_container** winsta_ptr, size_t* len){
+status_t retrieve_winstas_from_procs(vmi_instance_t vmi, struct winsta_container** winsta_ptr, size_t* len){
     size_t max_len = 0x100; 
     struct winsta_container winstas[max_len];
 
-    addr_t cur_list_entry = off->ps_active_process_head;
+    addr_t cur_list_entry = off.ps_active_process_head;
     addr_t next_list_entry = 0; 
 
     if (VMI_FAILURE == vmi_read_addr_va(vmi, cur_list_entry, 0, &next_list_entry))
@@ -620,13 +624,13 @@ status_t retrieve_winstas_from_procs(vmi_instance_t vmi, struct Offsets* off, st
     while (1)
     {
         /* Calculate offset to the start of _EPROCESS-struct */
-        current_process = cur_list_entry - off->active_proc_links_offset;
+        current_process = cur_list_entry - off.active_proc_links_offset;
 
         /* NOTE: _EPROCESS.UniqueProcessId is a really VOID*, but is never > 32 bits,
          * so this is safe enough for x64 Windows for example purposes */
-        vmi_read_32_va(vmi, current_process + off->pid_offset, 0, (uint32_t *)&pid);
+        vmi_read_32_va(vmi, current_process + off.pid_offset, 0, (uint32_t *)&pid);
 
-        procname = vmi_read_str_va(vmi, current_process + off->name_offset, 0);
+        procname = vmi_read_str_va(vmi, current_process + off.name_offset, 0);
 
         if (!procname)
         {
@@ -645,9 +649,9 @@ status_t retrieve_winstas_from_procs(vmi_instance_t vmi, struct Offsets* off, st
         addr_t thrd_list_head = 0;
 
         /* Retrieves pointer of ThreadListHead-member == associated thread */
-        if (VMI_FAILURE == vmi_read_addr_va(vmi, current_process + off->thread_list_head_offset, 0, &thrd_list_head))
+        if (VMI_FAILURE == vmi_read_addr_va(vmi, current_process + off.thread_list_head_offset, 0, &thrd_list_head))
         {
-            printf("Failed to read ThreadListHead-pointer at %" PRIx64 "\n", current_process + off->thread_list_head_offset);
+            printf("Failed to read ThreadListHead-pointer at %" PRIx64 "\n", current_process + off.thread_list_head_offset);
             return VMI_FAILURE;
         }
         printf("\tThreadListHead at: %" PRIx64 "\n", thrd_list_head);
@@ -660,16 +664,16 @@ status_t retrieve_winstas_from_procs(vmi_instance_t vmi, struct Offsets* off, st
         /* Walks the list of threads belonging to one process */
         while (1)
         {
-            cur_ethread = cur_thrd_list_entry - off->thread_list_entry_offset;
+            cur_ethread = cur_thrd_list_entry - off.thread_list_entry_offset;
             printf("\t\tThread at %" PRIx64 "\n", cur_ethread);
             /* _ETHREAD contains a  _KTHREAD structure (of size 0x200 for Win7) in the beginning */
             addr_t cur_kthread = cur_ethread;
             addr_t teb = 0;
 
             /* Retrieves pointer to Win32Thread  */
-            if (VMI_FAILURE == vmi_read_addr_va(vmi, cur_kthread + off->teb_offset, 0, &teb))
+            if (VMI_FAILURE == vmi_read_addr_va(vmi, cur_kthread + off.teb_offset, 0, &teb))
             {
-                printf("Failed to read Teb-pointer at %" PRIx64 "\n", cur_kthread + off->teb_offset);
+                printf("Failed to read Teb-pointer at %" PRIx64 "\n", cur_kthread + off.teb_offset);
                 return VMI_FAILURE;
             }
 
@@ -681,7 +685,7 @@ status_t retrieve_winstas_from_procs(vmi_instance_t vmi, struct Offsets* off, st
             }
 
             // Retrieves pointer to Win32ThreadInfo-struct
-            if (VMI_FAILURE == vmi_read_addr_va(vmi, teb + off->teb_win32threadinfo_offset, pid, &w32thrd_info)) // TODO read offset from json
+            if (VMI_FAILURE == vmi_read_addr_va(vmi, teb + off.teb_win32threadinfo_offset, pid, &w32thrd_info)) // TODO read offset from json
             {
                 printf("\t\tTEB at %" PRIx64 "\n", teb);
                 printf("\t\tFailed to read pointer to w32thrd_info at %" PRIx64 "\n", teb + 64);
@@ -698,9 +702,9 @@ status_t retrieve_winstas_from_procs(vmi_instance_t vmi, struct Offsets* off, st
             printf("\t\tWin32Thread at: %" PRIx64 "\n", w32thrd_info);
 
             // Retrieves pointer desktop info struct
-            if (VMI_FAILURE == vmi_read_addr_va(vmi, w32thrd_info + off->w32t_deskinfo_offset, pid, &desktop_info))
+            if (VMI_FAILURE == vmi_read_addr_va(vmi, w32thrd_info + off.w32t_deskinfo_offset, pid, &desktop_info))
             {
-                printf("\t\tFailed to read pointer to _DESKTOPINFO at %" PRIx64 "\n", w32thrd_info + off->w32t_deskinfo_offset);
+                printf("\t\tFailed to read pointer to _DESKTOPINFO at %" PRIx64 "\n", w32thrd_info + off.w32t_deskinfo_offset);
                 goto next_thrd;
             }
 
@@ -708,9 +712,9 @@ status_t retrieve_winstas_from_procs(vmi_instance_t vmi, struct Offsets* off, st
 
             addr_t cur_pwinsta = 0; 
             // Retrieves pointer to winsta struct
-            if (VMI_FAILURE == vmi_read_addr_va(vmi, w32thrd_info + off->w32t_pwinsta_offset, pid, &cur_pwinsta))
+            if (VMI_FAILURE == vmi_read_addr_va(vmi, w32thrd_info + off.w32t_pwinsta_offset, pid, &cur_pwinsta))
             {
-                printf("\t\tFailed to read pointer to tagWINDOWSTATION at %" PRIx64 "\n", w32thrd_info + off->w32t_pwinsta_offset);
+                printf("\t\tFailed to read pointer to tagWINDOWSTATION at %" PRIx64 "\n", w32thrd_info + off.w32t_pwinsta_offset);
                 goto next_thrd;
             }
 
@@ -726,7 +730,7 @@ status_t retrieve_winstas_from_procs(vmi_instance_t vmi, struct Offsets* off, st
                 }
                 if (!is_known && i < max_len){
                     struct winsta_container wc;
-                    populate_winsta(vmi, off, &wc, cur_pwinsta, pid);
+                    populate_winsta(vmi, &wc, cur_pwinsta, pid);
                     winstas[i] = wc;
                     winsta_count++; 
                 }
@@ -736,7 +740,7 @@ status_t retrieve_winstas_from_procs(vmi_instance_t vmi, struct Offsets* off, st
             /* Retrieves pointer of ThreadListHead-member == associated thread */
             if (VMI_FAILURE == vmi_read_addr_va(vmi, cur_thrd_list_entry, 0, &next_thread_entry))
             {
-                printf("Failed to read ThreadListHead-pointer at %" PRIx64 "\n", current_process + off->thread_list_head_offset);
+                printf("Failed to read ThreadListHead-pointer at %" PRIx64 "\n", current_process + off.thread_list_head_offset);
                 return VMI_FAILURE;
             }
 
@@ -762,7 +766,7 @@ status_t retrieve_winstas_from_procs(vmi_instance_t vmi, struct Offsets* off, st
          * EPROCESS struct.
          * It means in Windows, we should stop the loop at the last element in the list
          */
-        if (next_list_entry == off->ps_active_process_head)
+        if (next_list_entry == off.ps_active_process_head)
         {
             break;
         }
@@ -888,11 +892,9 @@ int main (int argc, char **argv)
     char *vm_name = vmi_get_name(vmi);
     printf("Reconstruction if windows for VM %s\n", vm_name); 
     free(vm_name);
-
-    struct Offsets off; 
-    
+   
     /* Retrieves offsets to relevent fields */
-    if(VMI_FAILURE == populate_offsets(vmi, &off)){
+    if(VMI_FAILURE == populate_offsets(vmi)){
         clean_up(vmi, init_data);
         exit(EXIT_FAILURE);
     }
@@ -906,7 +908,7 @@ int main (int argc, char **argv)
     struct winsta_container* winstas = NULL; 
 
     /* Gathers windows stations with all desktops by iterating over all processes */
-    if(VMI_FAILURE == retrieve_winstas_from_procs(vmi, &off, &winstas, &len))
+    if(VMI_FAILURE == retrieve_winstas_from_procs(vmi, &winstas, &len))
         clean_up(vmi, init_data);
 
      for (size_t i = 0; i < len; i++)
@@ -921,12 +923,9 @@ int main (int argc, char **argv)
         {
             GArray * windows = g_array_new(true, true, sizeof(addr_t));
             printf("Retrieving windows for desktop %" PRIx64 "\n", winstas[i].desktops[j]);
-            retrieve_windows_from_desktop_pid(vmi, &off, winstas[i].desktops[j], winstas[i].providing_pid, windows);
-            draw_windows(vmi, &off, 1280, 720, windows, winstas[i].providing_pid);
-            g_array_free(windows, true);
-            //clean_up(vmi, init_data);
-            //return 0;
-        
+            retrieve_windows_from_desktop_pid(vmi, winstas[i].desktops[j], winstas[i].providing_pid, windows);
+            draw_windows(vmi, 1280, 720, windows, winstas[i].providing_pid);
+            g_array_free(windows, true);        
         }       
         
     } 
