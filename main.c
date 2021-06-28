@@ -779,26 +779,20 @@ status_t retrieve_winstas_from_procs(vmi_instance_t vmi, struct winsta_container
     return VMI_SUCCESS;
 }
 
-void clean_up(vmi_instance_t vmi, vmi_init_data_t *init_data ){
+void clean_up(vmi_instance_t vmi ){
     /* Resumes the vm */
     vmi_resume_vm(vmi);
 
     /* Cleanup any memory associated with the LibVMI instance */
     vmi_destroy(vmi);
-
-    /* Free intialization data */
-    if (init_data) {
-        free(init_data->entry[0].data);
-        free(init_data);
-    }
 }
 
 int main (int argc, char **argv)
 {
     vmi_instance_t vmi = {0};
-    vmi_init_data_t *init_data = NULL;
     uint64_t domid = 0;
-    uint8_t init = VMI_INIT_DOMAINNAME, config_type = VMI_CONFIG_GLOBAL_FILE_ENTRY;
+    uint8_t init = VMI_INIT_DOMAINID;
+    uint8_t config_type = VMI_CONFIG_GLOBAL_FILE_ENTRY;
     void *input = NULL, *config = NULL;
 
     if ( argc < 2 ) {
@@ -808,16 +802,13 @@ int main (int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
-    // left for compatibility
     if ( argc == 2 )
         input = argv[1];
 
     if ( argc > 2 ) {
         const struct option long_opts[] = {
-            {"name", required_argument, NULL, 'n'},
             {"domid", required_argument, NULL, 'd'},
             {"json", required_argument, NULL, 'j'},
-            {"socket", optional_argument, NULL, 's'},
             {NULL, 0, NULL, 0}
         };
         const char* opts = "n:d:j:s:";
@@ -827,11 +818,7 @@ int main (int argc, char **argv)
         while ((c = getopt_long(argc, argv, opts, long_opts, &long_index)) != -1)
             switch (c)
             {
-            case 'n':
-                input = optarg;
-                break;
             case 'd':
-                init = VMI_INIT_DOMAINID;
                 domid = strtoull(optarg, NULL, 0);
                 input = (void *)&domid;
                 break;
@@ -839,36 +826,17 @@ int main (int argc, char **argv)
                 config_type = VMI_CONFIG_JSON_PATH;
                 config = (void *)optarg;
                 break;
-            case 's':
-                // in case we have multiple '-s' argument, avoid memory leak
-                if (init_data)
-                {
-                    free(init_data->entry[0].data);
-                }
-                else
-                {
-                    init_data = malloc(sizeof(vmi_init_data_t) + sizeof(vmi_init_data_entry_t));
-                }
-                init_data->count = 1;
-                init_data->entry[0].type = VMI_INIT_DATA_KVMI_SOCKET;
-                init_data->entry[0].data = strdup(optarg);
-                break;
             default:
                 printf("Unknown option\n");
-                if (init_data)
-                {
-                    free(init_data->entry[0].data);
-                    free(init_data);
-                }
                 exit(EXIT_FAILURE); 
             }
     }
     
 
     /* Initializes the libvmi library */
-    if (VMI_FAILURE == vmi_init_complete(&vmi, input, init, init_data, config_type, config, NULL)) {
+    if (VMI_FAILURE == vmi_init_complete(&vmi, input, init, NULL, config_type, config, NULL)) {
         printf("Failed to init LibVMI library.\n");
-        clean_up(vmi, init_data);
+        clean_up(vmi);
         exit(EXIT_FAILURE);
     }
     
@@ -877,14 +845,14 @@ int main (int argc, char **argv)
     os_t os = vmi_get_ostype(vmi);
     if (VMI_OS_WINDOWS != os){
         fprintf(stderr, "Only Windows is supported!"); 
-        clean_up(vmi, init_data);
+        clean_up(vmi);
         exit(EXIT_FAILURE);
     }
     
     /* Pauses the vm for consistent memory access */
     if (vmi_pause_vm(vmi) != VMI_SUCCESS) {
         printf("Failed to pause VM\n");
-        clean_up(vmi, init_data);
+        clean_up(vmi);
         exit(EXIT_FAILURE);
     } 
 
@@ -895,21 +863,15 @@ int main (int argc, char **argv)
    
     /* Retrieves offsets to relevent fields */
     if(VMI_FAILURE == populate_offsets(vmi)){
-        clean_up(vmi, init_data);
+        clean_up(vmi);
         exit(EXIT_FAILURE);
     }
-    
-    size_t len = 0x40; 
-    /*
-    addr_t winsta_addresses[len];
-    memset(winsta_addresses, 0, sizeof(addr_t) * len);
-    struct winsta_container winstas[len];  */
-    
+    size_t len = 0; 
     struct winsta_container* winstas = NULL; 
-
+    
     /* Gathers windows stations with all desktops by iterating over all processes */
     if(VMI_FAILURE == retrieve_winstas_from_procs(vmi, &winstas, &len))
-        clean_up(vmi, init_data);
+        clean_up(vmi);
 
      for (size_t i = 0; i < len; i++)
     {
@@ -929,8 +891,6 @@ int main (int argc, char **argv)
         }       
         
     } 
-
-    clean_up(vmi, init_data);
-
+    clean_up(vmi);
     exit(EXIT_SUCCESS);
 }
