@@ -141,7 +141,7 @@ struct wnd_container {
     bool is_visible; 
     struct rect_container r;
     const char* type; 
-    uint16_t atom; // TODO atom 
+    uint16_t atom; 
 };
 
 struct atom_entry{
@@ -307,7 +307,7 @@ status_t find_offsets(vmi_instance_t vmi){ // const char *win32k_config,
     off.rect_bottom_offset = 12; 
 
     // https://www.geoffchappell.com/studies/windows/win32/user32/structs/cls.htm?tx=56
-    off.cls_atom_offset = 8;
+    off.cls_atom_offset = 4;
     
     return VMI_SUCCESS; 
 }
@@ -323,7 +323,7 @@ void print_as_hex(char* cp, size_t l){
 /* 
  * Read a Windows wchar-string into a wchar_t*, since vmi_read_unicode_str_va fails to parse 
  * _RTL_ATOM_ENTRY's name-string. Expansion is performed since Windows' wchar is 2 bytes 
- * versus 4 bytes on Linux
+ * versus 4 bytes on 64bit-Linux
  */
 wchar_t* read_wchar_str(vmi_instance_t vmi, addr_t start, size_t len){
     wchar_t* s = malloc(sizeof(wchar_t) * len); 
@@ -363,12 +363,18 @@ status_t draw_single_window(vmi_instance_t vmi, addr_t win, vmi_pid_t pid){
     /* Determine extended style attributes */
     ret = vmi_read_32_va(vmi, win + off.wnd_exstyle, pid, (uint32_t *)&exstyle);
 
+        /* Retrieves atom value */
+    addr_t pcls = 0; 
+    ret = vmi_read_addr_va(vmi, win + off.pcls_offset, pid, &pcls);
+    uint16_t atom = 0; 
+    ret = vmi_read_16_va(vmi, pcls + off.cls_atom_offset, pid, &atom);
+
     if((style & WS_VISIBLE) && 
        !(style &WS_DISABLED) &&
        !(style & WS_MINIMIZE) && 
        !(exstyle & WS_EX_TRANSPARENT)
     ){  
-
+        printf("atom: %" PRIx16"\n", atom); 
         gfx_color(220, 220, 220);
         //gfx_fill_rect(x0, y0, x1-x0, y1-y0);
         
@@ -420,7 +426,7 @@ status_t draw_windows(vmi_instance_t vmi,int width, int height, GArray* windows,
     
     return VMI_SUCCESS;
 }
-status_t print_window_pid(vmi_instance_t vmi, addr_t win, vmi_pid_t pid){
+status_t print_window(vmi_instance_t vmi, addr_t win, vmi_pid_t pid, GHashTable* atom_table){
     status_t ret = VMI_FAILURE;
     unicode_string_t* wnd_name; 
 
@@ -437,9 +443,17 @@ status_t print_window_pid(vmi_instance_t vmi, addr_t win, vmi_pid_t pid){
     ret = vmi_read_32_va(vmi, win + off.rc_wnd_offset + off.rect_top_offset, pid, (uint32_t *)&y0);
     ret = vmi_read_32_va(vmi, win + off.rc_wnd_offset + off.rect_bottom_offset, pid, (uint32_t *)&y1);
     
-    /* Determine, if windows is visible */
+    /* Retrieves atom value */
+    addr_t pcls = 0; 
+    ret = vmi_read_addr_va(vmi, win + off.pcls_offset, pid, &pcls);
+    uint16_t* atom = malloc(sizeof(uint16_t)) ; 
+    ret = vmi_read_16_va(vmi, pcls + off.cls_atom_offset, pid, atom);
+    struct atom_entry* ae = g_hash_table_lookup(atom_table, atom); 
+
+    /* Determines, if windows is visible */
     ret = vmi_read_32_va(vmi, win + off.wnd_style, pid, (uint32_t *)&style);
-    /* Determine extended style attributes */
+
+    /* Determines extended style attributes */
     ret = vmi_read_32_va(vmi, win + off.wnd_exstyle, pid, (uint32_t *)&exstyle);
 
     if((style & WS_VISIBLE) && 
@@ -449,6 +463,12 @@ status_t print_window_pid(vmi_instance_t vmi, addr_t win, vmi_pid_t pid){
     ){
         printf("\t\tSize: %d x %d\n", x1 - x0, y1 - y0);
         printf("\t\t\tVisibilty: %"  PRIx32"\n", style); 
+        printf("\t\t\tAtom: %"  PRIx16"\n", *atom);
+
+        if(ae)
+           printf("\t\t\tClass Name: %ls\n", ae->name); 
+        free(atom);
+        
         printf("\t\t\t_WINDOW.x0: %" PRIx32 "\n", x0);
         printf("\t\t\t_WINDOW.x1: %" PRIx32 "\n", x1);
         printf("\t\t\t_WINDOW.y0: %" PRIx32 "\n", y0);
@@ -486,8 +506,6 @@ status_t traverse_windows_pid(vmi_instance_t vmi, addr_t *win,
     while(*cur){
         /* Stores window as result*/
         g_array_append_val(result_windows, *cur);
-
-        print_window_pid(vmi, *cur, pid); 
     
         if(g_hash_table_lookup(seen_windows, (gpointer) cur) != NULL){
             printf("Cycle after %d siblings\n", g_hash_table_size(seen_windows));
@@ -866,6 +884,18 @@ status_t retrieve_winstas_from_procs(vmi_instance_t vmi, struct winsta_container
     return VMI_SUCCESS;
 }
 
+void print_atom_table(GHashTable* atom_table){
+        GHashTableIter iter;
+
+        g_hash_table_iter_init(&iter, atom_table);
+        struct atom_entry *val;
+        uint16_t *key;
+
+        while (g_hash_table_iter_next (&iter, (gpointer) &key, (gpointer) &val)){
+            printf("Atom: %" PRIx16 " %ls\n", *key, val->name);      
+        }
+}
+
 struct atom_entry * parse_atom_entry(vmi_instance_t vmi, addr_t atom_addr)
 {
     struct atom_entry *entry = malloc( sizeof(struct atom_entry));
@@ -1058,7 +1088,8 @@ int main (int argc, char **argv)
 
     printf("\n\nAddr     \tInteractive?\tSession\n"); 
     printf("-------------------------------------\n");
-     for (size_t i = 0; i < len; i++)
+    
+    for (size_t i = 0; i < len; i++)
     {
         printf("%" PRIx64 "\t", winstas[i].addr);
         if(winstas[i].is_interactive)
@@ -1067,26 +1098,26 @@ int main (int argc, char **argv)
             printf("Not interactive\t");
 
         printf("# %" PRId32 "\n", winstas[i].session_id);
-        //    continue;
-/*
-        GHashTable* atom_table = g_hash_table_new(g_int_hash, g_int_equal);  
-        build_atom_table(vmi, winstas[i].addr, winstas[i].providing_pid, atom_table);
-        g_hash_table_destroy(atom_table); 
- 
+
+        GHashTable *atom_table = build_atom_table(vmi, winstas[i].atom_table);            
+
         for (size_t j = 0; j < winstas[i].len_desktops; j++)
         {
             GArray * windows = g_array_new(true, true, sizeof(addr_t));
             printf("Retrieving windows for desktop %" PRIx64 "\n", winstas[i].desktops[j]);
             retrieve_windows_from_desktop(vmi, winstas[i].desktops[j], winstas[i].providing_pid, windows);
-            draw_windows(vmi, 1280, 720, windows, winstas[i].providing_pid);
+             
+            addr_t wnd_addr = 0; 
+            for (size_t j = 0; j < windows->len; j++)
+            {
+                wnd_addr = g_array_index(windows, addr_t, j);
+                print_window(vmi, wnd_addr, winstas[i].providing_pid, atom_table);
+            }
+            
+            //draw_windows(vmi, 1024, 768, windows, winstas[i].providing_pid);
             g_array_free(windows, true);        
-        }   */     
-        
-    }
-    for (size_t i = 0; i < len; i++)
-    {
-        GHashTable *atom_table = build_atom_table(vmi, winstas[i].atom_table);
-        g_hash_table_destroy(atom_table);
+        }   
+        g_hash_table_destroy(atom_table);   
     }
 
     // https://resources.infosecinstitute.com/topic/windows-gui-forensics-session-objects-window-stations-and-desktop/
