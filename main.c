@@ -196,6 +196,9 @@ struct Offsets
     addr_t wnd_style; // 32
     addr_t wnd_exstyle; // 28
     addr_t pcls_offset; // CLS* pcls
+    addr_t wnd_strname_offset; // offset to _LARGE_UNICODE_STRING
+
+    addr_t large_unicode_buf_offset;
 
     // tagRECT
     addr_t rect_left_offset;
@@ -354,6 +357,9 @@ status_t find_offsets(vmi_instance_t vmi)  // const char *win32k_config,
     off.wnd_style = 32;
     off.wnd_exstyle = 28;
     off.pcls_offset = 100;
+    off.wnd_strname_offset = 132;
+
+    off.large_unicode_buf_offset = 8;
 
     // _RECT content
     off.rect_left_offset = 0;
@@ -455,6 +461,29 @@ status_t draw_single_window(vmi_instance_t vmi, addr_t win, vmi_pid_t pid)
         gfx_color(0, 0, 0);
         gfx_rect(x0, y0, x1-x0, y1-y0);
         gfx_flush();
+
+        addr_t str_name_off;
+
+        /* Retrieves window name */
+        if (VMI_FAILURE != vmi_read_addr_va(vmi, win + off.wnd_strname_offset + off.large_unicode_buf_offset, pid, &str_name_off))
+        {
+            /*
+             * Length is always 0, therefore always read 255 chars
+             * https://github.com/volatilityfoundation/volatility/blob/a438e768194a9e05eb4d9ee9338b881c0fa25937/volatility/plugins/gui/vtypes/win7_sp1_x86_vtypes_gui.py#L650
+             */
+            wchar_t* wn = read_wchar_str_pid(vmi, str_name_off, (size_t) 255, pid);
+
+            if (wn)
+            {
+                size_t l = wcslen(wn);
+                char* wn_ascii = (char*)malloc(sizeof(char) * (l + 1));
+                size_t c = wcstombs(wn_ascii, wn, l);
+                printf("Width %d\n", x1-x0);
+                fflush(stdout);
+                if ( x1-x0 > 0)
+                    gfx_draw_str_multiline(x0, y0, wn_ascii, c, x1-x0);
+            }
+        }
     }
     return ret;
 }
@@ -494,7 +523,6 @@ status_t draw_windows(vmi_instance_t vmi, int width, int height, GArray* windows
 status_t print_window(vmi_instance_t vmi, addr_t win, vmi_pid_t pid, GHashTable* atom_table)
 {
     status_t ret = VMI_FAILURE;
-    unicode_string_t* wnd_name;
 
     uint32_t x0 = 0;
     uint32_t x1 = 0;
@@ -525,8 +553,7 @@ status_t print_window(vmi_instance_t vmi, addr_t win, vmi_pid_t pid, GHashTable*
     if ((style & WS_VISIBLE) &&
         !(style &WS_DISABLED) &&
         !(style & WS_MINIMIZE) &&
-        !(exstyle & WS_EX_TRANSPARENT)
-    )
+        !(exstyle & WS_EX_TRANSPARENT))
     {
         printf("\t\tSize: %d x %d\n", x1 - x0, y1 - y0);
         printf("\t\t\tVisibilty: %"  PRIx32"\n", style);
@@ -542,9 +569,9 @@ status_t print_window(vmi_instance_t vmi, addr_t win, vmi_pid_t pid, GHashTable*
         printf("\t\t\t_WINDOW.y1: %" PRIx32 "\n", y1);
 
         addr_t str_name_off = 0;
-        uint32_t len = 0;
-        // https://github.com/volatilityfoundation/volatility/blob/a438e768194a9e05eb4d9ee9338b881c0fa25937/volatility/plugins/gui/vtypes/win7_sp1_x86_vtypes_gui.py#L981
-        if (VMI_FAILURE != vmi_read_addr_va(vmi, win + 132 + 8, pid, &str_name_off))
+
+        /* Retrieves window name */
+        if (VMI_FAILURE != vmi_read_addr_va(vmi, win + off.wnd_strname_offset + off.large_unicode_buf_offset, pid, &str_name_off))
         {
             /*
              * Length is always 0, therefore always read 255 chars
