@@ -937,6 +937,59 @@ struct atom_entry * parse_atom_entry(vmi_instance_t vmi, addr_t atom_addr)
     
     return entry;
 }
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+/* See https://github.com/volatilityfoundation/volatility/blob/a438e768194a9e05eb4d9ee9338b881c0fa25937/volatility/plugins/gui/constants.py#L34 */
+struct atom_entry ae [] = 
+    { 
+        {
+        .atom = 0x8000,
+        .name = L"PopuoMenu",
+        .name_len = 9,
+        .hashlink = 0,
+        .ref_count = 0,
+        },
+        {
+        .atom = 0x8001,
+        .name = L"Desktop",
+        .name_len = 7,
+        .hashlink = 0,
+        .ref_count = 0,
+        },
+        {
+        .atom = 0x8002,
+        .name = L"Dialog",
+        .name_len = 6,
+        .hashlink = 0,
+        .ref_count = 0,
+        },
+        {
+        .atom = 0x8003,
+        .name = L"WinSwitch",
+        .name_len = 9,
+        .hashlink = 0,
+        .ref_count = 0,
+        },
+        {
+        .atom = 0x8004,
+        .name = L"IconTitle",
+        .name_len = 9,
+        .hashlink = 0,
+        .ref_count = 0,
+        },
+        {
+        .atom = 0x8006,
+        .name = L"ToolTip",
+        .name_len = 9,
+        .hashlink = 0,
+        .ref_count = 0,
+        }
+    };
+
+void add_default_atoms(GHashTable* atom_table)
+{
+    for(int i = 0; i<ARRAY_SIZE(ae); i++)
+        g_hash_table_insert(atom_table,  &(ae[i].atom), (gpointer) &ae[i]); 
+}
 
 /* https://bsodtutorials.wordpress.com/2015/11/11/understanding-atom-tables/ */
 GHashTable* build_atom_table(vmi_instance_t vmi, addr_t table_addr)
@@ -951,6 +1004,7 @@ GHashTable* build_atom_table(vmi_instance_t vmi, addr_t table_addr)
     //printf("Num buckets in _RTL_ATOM_TABLE: %"PRId32"\n", num_buckets); 
 
     GHashTable* ht = g_hash_table_new(g_int_hash, g_int_equal);
+    add_default_atoms(ht); 
 
     size_t i = 0;
     addr_t cur = 0; 
@@ -1100,7 +1154,8 @@ int main (int argc, char **argv)
         printf("# %" PRId32 "\n", winstas[i].session_id);
 
         GHashTable *atom_table = build_atom_table(vmi, winstas[i].atom_table);            
-
+        print_atom_table(atom_table); 
+        
         for (size_t j = 0; j < winstas[i].len_desktops; j++)
         {
             GArray * windows = g_array_new(true, true, sizeof(addr_t));
