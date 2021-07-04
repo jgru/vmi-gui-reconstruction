@@ -37,6 +37,103 @@
 #define WS_EX_ACCEPTFILES 0x00000010
 #define WS_EX_TRANSPARENT 0x00000020
 
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+
+/* 
+ * The following structs encapsulate only the information needed for the purpose of reconstructing the 
+ * GUI to a level, where dialogs could be identified for clicking 
+ */
+struct winsta_container {
+    addr_t addr; 
+    /* 
+     * For	each GUI thread, win32k	maps, the associated desktop heap into the user-­‐mode
+     * http://mista.nu/research/mandt-win32k-slides.pdf
+     * 
+     * Therefore do it like volatility: Find a process with matching sessionID and take its VA as _MM_SESSION_SPACE for the WinSta
+     * https://github.com/volatilityfoundation/volatility/blob/a438e768194a9e05eb4d9ee9338b881c0fa25937/volatility/plugins/gui/sessions.py#L49
+     * 
+     * To accomplish this, it's the most easy way to use vmi_read_xx_va
+     */
+    vmi_pid_t providing_pid;
+    uint32_t session_id; 
+    addr_t atom_table; 
+    bool is_interactive; 
+    size_t len_desktops;
+    addr_t* desktops; 
+};
+
+struct rect_container {
+    uint32_t x0;
+    uint32_t x1;
+    uint32_t y0;
+    uint32_t y1;
+};
+
+struct wnd_container {
+    addr_t spwnd_addr; 
+    bool is_visible; 
+    struct rect_container r;
+    const char* type; 
+    uint16_t atom; 
+};
+
+struct atom_entry{
+    uint16_t atom; 
+    uint16_t ref_count; 
+    addr_t hashlink; 
+    uint8_t name_len; 
+    wchar_t* name; 
+    //unicode_string_t* name;
+
+};
+
+/* See https://github.com/volatilityfoundation/volatility/blob/a438e768194a9e05eb4d9ee9338b881c0fa25937/volatility/plugins/gui/constants.py#L34 */
+struct atom_entry ae [] = 
+    { 
+        {
+        .atom = 0x8000,
+        .name = L"PopupMenu",
+        .name_len = 9,
+        .hashlink = 0,
+        .ref_count = 0,
+        },
+        {
+        .atom = 0x8001,
+        .name = L"Desktop",
+        .name_len = 7,
+        .hashlink = 0,
+        .ref_count = 0,
+        },
+        {
+        .atom = 0x8002,
+        .name = L"Dialog",
+        .name_len = 6,
+        .hashlink = 0,
+        .ref_count = 0,
+        },
+        {
+        .atom = 0x8003,
+        .name = L"WinSwitch",
+        .name_len = 9,
+        .hashlink = 0,
+        .ref_count = 0,
+        },
+        {
+        .atom = 0x8004,
+        .name = L"IconTitle",
+        .name_len = 9,
+        .hashlink = 0,
+        .ref_count = 0,
+        },
+        {
+        .atom = 0x8006,
+        .name = L"ToolTip",
+        .name_len = 9,
+        .hashlink = 0,
+        .ref_count = 0,
+        }
+    };
+
 struct Offsets {
     addr_t ps_active_process_head; 
 
@@ -105,54 +202,6 @@ struct Offsets {
     // https://www.geoffchappell.com/studies/windows/win32/user32/structs/cls.htm?tx=56
     addr_t cls_atom_offset; 
 } off; 
-
-/* 
- * The following structs encapsulate only the information needed for the purpose of reconstructing the 
- * GUI to a level, where dialogs could be identified for clicking 
- */
-struct winsta_container {
-    addr_t addr; 
-    /* 
-     * For	each GUI thread, win32k	maps, the associated desktop heap into the user-­‐mode
-     * http://mista.nu/research/mandt-win32k-slides.pdf
-     * 
-     * Therefore do it like volatility: Find a process with matching sessionID and take its VA as _MM_SESSION_SPACE for the WinSta
-     * https://github.com/volatilityfoundation/volatility/blob/a438e768194a9e05eb4d9ee9338b881c0fa25937/volatility/plugins/gui/sessions.py#L49
-     * 
-     * To accomplish this, it's the most easy way to use vmi_read_xx_va
-     */
-    vmi_pid_t providing_pid;
-    uint32_t session_id; 
-    addr_t atom_table; 
-    bool is_interactive; 
-    size_t len_desktops;
-    addr_t* desktops; 
-};
-
-struct rect_container {
-    uint32_t x0;
-    uint32_t x1;
-    uint32_t y0;
-    uint32_t y1;
-};
-
-struct wnd_container {
-    addr_t spwnd_addr; 
-    bool is_visible; 
-    struct rect_container r;
-    const char* type; 
-    uint16_t atom; 
-};
-
-struct atom_entry{
-    uint16_t atom; 
-    uint16_t ref_count; 
-    addr_t hashlink; 
-    uint8_t name_len; 
-    wchar_t* name; 
-    //unicode_string_t* name;
-
-};
 
 status_t find_offsets(vmi_instance_t vmi){ // const char *win32k_config,
 
@@ -325,22 +374,28 @@ void print_as_hex(char* cp, size_t l){
  * _RTL_ATOM_ENTRY's name-string. Expansion is performed since Windows' wchar is 2 bytes 
  * versus 4 bytes on 64bit-Linux
  */
-wchar_t* read_wchar_str(vmi_instance_t vmi, addr_t start, size_t len){
-    wchar_t* s = malloc(sizeof(wchar_t) * len); 
+wchar_t *read_wchar_str_pid(vmi_instance_t vmi, addr_t start, size_t len, vmi_pid_t pid)
+{
+    wchar_t *s = malloc(sizeof(wchar_t) * len);
     memset(s, 0, len);
 
     for (size_t i = 0; i < len; i++)
-    {   
+    {
         uint16_t c = 0;
-        if (VMI_FAILURE == vmi_read_16_va(vmi, start + i*2, 0, &c))
+        if (VMI_FAILURE == vmi_read_16_va(vmi, start + i * 2, pid, &c))
         {
-            printf("Error reading wchar at %" PRIx64 "\n", start + i*2);
+            printf("Error reading wchar at %" PRIx64 "\n", start + i * 2);
             free(s);
             return NULL;
         }
-        s[i] = (wchar_t) c; 
-    } 
-    return s; 
+        s[i] = (wchar_t)c;
+    }
+    return s;
+}
+
+wchar_t *read_wchar_str(vmi_instance_t vmi, addr_t start, size_t len)
+{
+    return read_wchar_str_pid(vmi, start, len, 0);
 }
 
 status_t draw_single_window(vmi_instance_t vmi, addr_t win, vmi_pid_t pid){
@@ -446,9 +501,9 @@ status_t print_window(vmi_instance_t vmi, addr_t win, vmi_pid_t pid, GHashTable*
     /* Retrieves atom value */
     addr_t pcls = 0; 
     ret = vmi_read_addr_va(vmi, win + off.pcls_offset, pid, &pcls);
-    uint16_t* atom = malloc(sizeof(uint16_t)) ; 
-    ret = vmi_read_16_va(vmi, pcls + off.cls_atom_offset, pid, atom);
-    struct atom_entry* ae = g_hash_table_lookup(atom_table, atom); 
+    uint16_t atom = 0;
+    ret = vmi_read_16_va(vmi, pcls + off.cls_atom_offset, pid, &atom);
+    struct atom_entry* ae = g_hash_table_lookup(atom_table, GUINT_TO_POINTER(atom)); 
 
     /* Determines, if windows is visible */
     ret = vmi_read_32_va(vmi, win + off.wnd_style, pid, (uint32_t *)&style);
@@ -463,11 +518,11 @@ status_t print_window(vmi_instance_t vmi, addr_t win, vmi_pid_t pid, GHashTable*
     ){
         printf("\t\tSize: %d x %d\n", x1 - x0, y1 - y0);
         printf("\t\t\tVisibilty: %"  PRIx32"\n", style); 
-        printf("\t\t\tAtom: %"  PRIx16"\n", *atom);
+        printf("\t\t\tAtom: %"  PRIx16"\n", atom);
 
         if(ae)
            printf("\t\t\tClass Name: %ls\n", ae->name); 
-        free(atom);
+
         
         printf("\t\t\t_WINDOW.x0: %" PRIx32 "\n", x0);
         printf("\t\t\t_WINDOW.x1: %" PRIx32 "\n", x1);
@@ -478,20 +533,14 @@ status_t print_window(vmi_instance_t vmi, addr_t win, vmi_pid_t pid, GHashTable*
         uint32_t len = 0;  
         // https://github.com/volatilityfoundation/volatility/blob/a438e768194a9e05eb4d9ee9338b881c0fa25937/volatility/plugins/gui/vtypes/win7_sp1_x86_vtypes_gui.py#L981
         if(VMI_FAILURE != vmi_read_addr_va(vmi, win + 132 + 8, pid, &str_name_off)){
-            printf("\t\t\tRead strNameOff\n");
-            vmi_read_32_va(vmi, win + off.wnd_style, win + 132 , (uint32_t *)&len);
-            printf("\t\t\tLength: %d\n", len);
-            // Lenght always 0 ...Fix or delete
-            // https://github.com/volatilityfoundation/volatility/blob/a438e768194a9e05eb4d9ee9338b881c0fa25937/volatility/plugins/gui/vtypes/win7_sp1_x86_vtypes_gui.py#L650
-            wnd_name = vmi_read_unicode_str_va(vmi, str_name_off, pid);
+            /* 
+             * Length is always 0, therefore always read 255 chars
+             * https://github.com/volatilityfoundation/volatility/blob/a438e768194a9e05eb4d9ee9338b881c0fa25937/volatility/plugins/gui/vtypes/win7_sp1_x86_vtypes_gui.py#L650
+             */
+            wchar_t* wn = read_wchar_str_pid(vmi, str_name_off, (size_t) 255, pid);
 
-            if (wnd_name)
-            {
-                printf("\t\t\tWindow name (length: %ld): ", wnd_name->length);
-                print_as_hex((char*)wnd_name->contents, wnd_name->length); 
-                free(wnd_name);
-            }
-            //printf("Window Name: %s\n", wnd_name->contents); 
+            if(wn)
+                printf("\t\t\tWindow name wchar: %ls\n", wn);
         }
     }
     return ret; 
@@ -889,10 +938,10 @@ void print_atom_table(GHashTable* atom_table){
 
         g_hash_table_iter_init(&iter, atom_table);
         struct atom_entry *val;
-        uint16_t *key;
+        uint16_t key; 
 
         while (g_hash_table_iter_next (&iter, (gpointer) &key, (gpointer) &val)){
-            printf("Atom: %" PRIx16 " %ls\n", *key, val->name);      
+            printf("Atom: %" PRIx16 " %ls\n", key, val->name);      
         }
 }
 
@@ -937,58 +986,11 @@ struct atom_entry * parse_atom_entry(vmi_instance_t vmi, addr_t atom_addr)
     
     return entry;
 }
-#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
-/* See https://github.com/volatilityfoundation/volatility/blob/a438e768194a9e05eb4d9ee9338b881c0fa25937/volatility/plugins/gui/constants.py#L34 */
-struct atom_entry ae [] = 
-    { 
-        {
-        .atom = 0x8000,
-        .name = L"PopuoMenu",
-        .name_len = 9,
-        .hashlink = 0,
-        .ref_count = 0,
-        },
-        {
-        .atom = 0x8001,
-        .name = L"Desktop",
-        .name_len = 7,
-        .hashlink = 0,
-        .ref_count = 0,
-        },
-        {
-        .atom = 0x8002,
-        .name = L"Dialog",
-        .name_len = 6,
-        .hashlink = 0,
-        .ref_count = 0,
-        },
-        {
-        .atom = 0x8003,
-        .name = L"WinSwitch",
-        .name_len = 9,
-        .hashlink = 0,
-        .ref_count = 0,
-        },
-        {
-        .atom = 0x8004,
-        .name = L"IconTitle",
-        .name_len = 9,
-        .hashlink = 0,
-        .ref_count = 0,
-        },
-        {
-        .atom = 0x8006,
-        .name = L"ToolTip",
-        .name_len = 9,
-        .hashlink = 0,
-        .ref_count = 0,
-        }
-    };
 
 void add_default_atoms(GHashTable* atom_table)
 {
     for(int i = 0; i<ARRAY_SIZE(ae); i++)
-        g_hash_table_insert(atom_table,  &(ae[i].atom), (gpointer) &ae[i]); 
+        g_hash_table_insert(atom_table, GUINT_TO_POINTER(ae[i].atom), (gpointer) &ae[i]); 
 }
 
 /* https://bsodtutorials.wordpress.com/2015/11/11/understanding-atom-tables/ */
@@ -1003,7 +1005,7 @@ GHashTable* build_atom_table(vmi_instance_t vmi, addr_t table_addr)
     }
     //printf("Num buckets in _RTL_ATOM_TABLE: %"PRId32"\n", num_buckets); 
 
-    GHashTable* ht = g_hash_table_new(g_int_hash, g_int_equal);
+    GHashTable* ht = g_hash_table_new(g_direct_hash, g_direct_equal);
     add_default_atoms(ht); 
 
     size_t i = 0;
@@ -1027,7 +1029,7 @@ GHashTable* build_atom_table(vmi_instance_t vmi, addr_t table_addr)
         a = parse_atom_entry(vmi, cur);
         
         if (a){
-            g_hash_table_insert(ht,  &a->atom, (gpointer) a); 
+            g_hash_table_insert(ht,  GUINT_TO_POINTER(a->atom), (gpointer) a); 
             //printf("Atom at: %" PRIx64 " - Value: %" PRIx16 " - %" PRId32 "\n", cur, a->atom, a->ref_count);
         }
         /* Traverses the linked list of each top level _RTL_ATOM_TABLE_ENTRY */
@@ -1038,7 +1040,7 @@ GHashTable* build_atom_table(vmi_instance_t vmi, addr_t table_addr)
 
             if (a)
             {
-                g_hash_table_insert(ht,  &a->atom, (gpointer)a);
+                g_hash_table_insert(ht,  GUINT_TO_POINTER(a->atom), (gpointer)a);
                 //printf("Atom at: %" PRIx64 " - Value: %" PRIx16 " - %" PRId32 "\n", cur, a->atom, a->ref_count);
             }
         }
@@ -1155,7 +1157,7 @@ int main (int argc, char **argv)
 
         GHashTable *atom_table = build_atom_table(vmi, winstas[i].atom_table);            
         print_atom_table(atom_table); 
-        
+
         for (size_t j = 0; j < winstas[i].len_desktops; j++)
         {
             GArray * windows = g_array_new(true, true, sizeof(addr_t));
@@ -1169,7 +1171,7 @@ int main (int argc, char **argv)
                 print_window(vmi, wnd_addr, winstas[i].providing_pid, atom_table);
             }
             
-            //draw_windows(vmi, 1024, 768, windows, winstas[i].providing_pid);
+            draw_windows(vmi, 1024, 768, windows, winstas[i].providing_pid);
             g_array_free(windows, true);        
         }   
         g_hash_table_destroy(atom_table);   
