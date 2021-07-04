@@ -141,6 +141,7 @@ struct wnd_container {
     bool is_visible; 
     struct rect_container r;
     const char* type; 
+    uint16_t atom; // TODO atom 
 };
 
 struct atom_entry{
@@ -153,7 +154,7 @@ struct atom_entry{
 
 };
 
-status_t populate_offsets(vmi_instance_t vmi){ // const char *win32k_config,
+status_t find_offsets(vmi_instance_t vmi){ // const char *win32k_config,
 
     if (VMI_FAILURE == vmi_read_addr_ksym(vmi, "PsActiveProcessHead", &off.ps_active_process_head))
     {
@@ -536,12 +537,13 @@ status_t traverse_windows_pid(vmi_instance_t vmi, addr_t *win,
     return VMI_SUCCESS;
 }
 
-status_t retrieve_windows_from_desktop_pid(vmi_instance_t vmi, addr_t desktop, vmi_pid_t pid, GArray *result_windows)
+status_t retrieve_windows_from_desktop(vmi_instance_t vmi, addr_t desktop, vmi_pid_t pid, GArray* result_windows)
 {
     uint32_t desk_id = 0; 
 
     addr_t addr = desktop + off.desk_desktopid_off;
-    // Desktop ID
+
+    /* Reads desktop ID */
     if (VMI_FAILURE == vmi_read_32_va(vmi, addr, pid, &desk_id))
     {
         printf("\t\tFailed to read desktop ID at %" PRIx64 "\n", desktop + off.desk_desktopid_off);
@@ -563,6 +565,7 @@ status_t retrieve_windows_from_desktop_pid(vmi_instance_t vmi, addr_t desktop, v
     addr_t spwnd = 0;
 
     addr = desktop_info + off.spwnd_offset;
+
     /* Retrieves pointer to struct pointer window */
     if (VMI_FAILURE == vmi_read_addr_va(vmi, addr, pid, &spwnd))
     {
@@ -777,7 +780,7 @@ status_t retrieve_winstas_from_procs(vmi_instance_t vmi, struct winsta_container
             }
             addr_t desktop_info = 0;
 
-            /* Not every thread has a THREADINFO-struct */
+            /* Since not every thread has a THREADINFO-struct, skip thread in this case */
             if (!w32thrd_info)
             {
                 goto next_thrd;
@@ -863,7 +866,7 @@ status_t retrieve_winstas_from_procs(vmi_instance_t vmi, struct winsta_container
     return VMI_SUCCESS;
 }
 
-struct atom_entry * populate_atom_entry(vmi_instance_t vmi, addr_t atom_addr)
+struct atom_entry * parse_atom_entry(vmi_instance_t vmi, addr_t atom_addr)
 {
     struct atom_entry *entry = malloc( sizeof(struct atom_entry));
     memset(entry, 0, sizeof(struct atom_entry)); 
@@ -891,7 +894,7 @@ struct atom_entry * populate_atom_entry(vmi_instance_t vmi, addr_t atom_addr)
         printf("Error reading NameLength at %" PRIx64 "\n", atom_addr + off.atom_entry_name_len_offset);
         return NULL;
     }
-    printf("Name length %d\n", entry->name_len);
+    //printf("Name length %d\n", entry->name_len);
     entry->name = read_wchar_str(vmi, atom_addr + off.atom_entry_name_offset, (size_t) entry->name_len);
 
     //entry->name = vmi_read_unicode_str_va(vmi, atom_addr + off.atom_entry_name_offset, 0);
@@ -900,14 +903,13 @@ struct atom_entry * populate_atom_entry(vmi_instance_t vmi, addr_t atom_addr)
     if (!entry->name) 
     {
         printf("Error reading wchar-string Name at %" PRIx64 "\n", atom_addr + off.atom_entry_name_offset);
-    }else
-        printf("%ls\n", entry->name);
-
+    }
+    
     return entry;
 }
 
 /* https://bsodtutorials.wordpress.com/2015/11/11/understanding-atom-tables/ */
-GHashTable* populate_atom_table(vmi_instance_t vmi, addr_t table_addr)
+GHashTable* build_atom_table(vmi_instance_t vmi, addr_t table_addr)
 {
     uint32_t num_buckets = 0;  
 
@@ -916,7 +918,7 @@ GHashTable* populate_atom_table(vmi_instance_t vmi, addr_t table_addr)
         printf("Failed to read num buckets-value of _RTL_ATOM_TABLE at %" PRIx64 "\n", table_addr + off.atom_table_num_buckets_off);
         return NULL;
     }
-    printf("Num buckets in _RTL_ATOM_TABLE: %"PRId32"\n", num_buckets); 
+    //printf("Num buckets in _RTL_ATOM_TABLE: %"PRId32"\n", num_buckets); 
 
     GHashTable* ht = g_hash_table_new(g_int_hash, g_int_equal);
 
@@ -930,6 +932,7 @@ GHashTable* populate_atom_table(vmi_instance_t vmi, addr_t table_addr)
         if (VMI_FAILURE == vmi_read_addr_va(vmi, table_addr + off.atom_table_buckets_off + i * 4, 0, &cur))
         {
             printf("Failed to read pointer to buckets entry of _RTL_ATOM_TABLE at %" PRIx64 "\n", table_addr + off.atom_table_buckets_off  + i * 4);
+            g_hash_table_destroy(ht);
             return NULL;
         }
         i++;
@@ -937,23 +940,22 @@ GHashTable* populate_atom_table(vmi_instance_t vmi, addr_t table_addr)
         if (!cur)
             continue;
 
-        a = populate_atom_entry(vmi, cur);
+        a = parse_atom_entry(vmi, cur);
         
         if (a){
             g_hash_table_insert(ht,  &a->atom, (gpointer) a); 
-            printf("Atom at: %" PRIx64 " - Value: %" PRIx16 " - %" PRId32 "\n", cur, a->atom, a->ref_count);
-            //print_as_hex((char*)a->name->contents, a->name->length); 
+            //printf("Atom at: %" PRIx64 " - Value: %" PRIx16 " - %" PRId32 "\n", cur, a->atom, a->ref_count);
         }
         /* Traverses the linked list of each top level _RTL_ATOM_TABLE_ENTRY */
         while (a && a->hashlink)
         {   
             cur = a->hashlink;
-            a = populate_atom_entry(vmi, cur);
+            a = parse_atom_entry(vmi, cur);
 
             if (a)
             {
                 g_hash_table_insert(ht,  &a->atom, (gpointer)a);
-                printf("Atom at: %" PRIx64 " - Value: %" PRIx16 " - %" PRId32 "\n", cur, a->atom, a->ref_count);
+                //printf("Atom at: %" PRIx64 " - Value: %" PRIx16 " - %" PRId32 "\n", cur, a->atom, a->ref_count);
             }
         }
     }
@@ -1042,7 +1044,7 @@ int main (int argc, char **argv)
     free(vm_name);
    
     /* Retrieves offsets to relevent fields */
-    if(VMI_FAILURE == populate_offsets(vmi)){
+    if(VMI_FAILURE == find_offsets(vmi)){
         clean_up(vmi);
         exit(EXIT_FAILURE);
     }
@@ -1068,14 +1070,14 @@ int main (int argc, char **argv)
         //    continue;
 /*
         GHashTable* atom_table = g_hash_table_new(g_int_hash, g_int_equal);  
-        populate_atom_table(vmi, winstas[i].addr, winstas[i].providing_pid, atom_table);
+        build_atom_table(vmi, winstas[i].addr, winstas[i].providing_pid, atom_table);
         g_hash_table_destroy(atom_table); 
  
         for (size_t j = 0; j < winstas[i].len_desktops; j++)
         {
             GArray * windows = g_array_new(true, true, sizeof(addr_t));
             printf("Retrieving windows for desktop %" PRIx64 "\n", winstas[i].desktops[j]);
-            retrieve_windows_from_desktop_pid(vmi, winstas[i].desktops[j], winstas[i].providing_pid, windows);
+            retrieve_windows_from_desktop(vmi, winstas[i].desktops[j], winstas[i].providing_pid, windows);
             draw_windows(vmi, 1280, 720, windows, winstas[i].providing_pid);
             g_array_free(windows, true);        
         }   */     
@@ -1083,7 +1085,7 @@ int main (int argc, char **argv)
     }
     for (size_t i = 0; i < len; i++)
     {
-        GHashTable *atom_table = populate_atom_table(vmi, winstas[i].atom_table);
+        GHashTable *atom_table = build_atom_table(vmi, winstas[i].atom_table);
         g_hash_table_destroy(atom_table);
     }
 
