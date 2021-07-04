@@ -30,7 +30,7 @@ static int gfx_fast_color_mode = 0;
 static char* gfx_font = "*normal--12*";
 static XFontSet gfx_font_set;
 static XFontStruct* gfx_font_struct;
-static int font_v_offset = 0; 
+static int font_v_offset = 0;
 
 /* These values are saved by gfx_wait then retrieved later by gfx_xpos and gfx_ypos. */
 static int saved_xpos = 0;
@@ -81,14 +81,14 @@ void gfx_open( int width, int height, const char* title )
     char** missing_charset_list_return = NULL;
     int missing_charset_count_return = 0 ;
     char* def_string_return = NULL;
-	
-	/* Prepares fonts */
+
+    /* Prepares fonts */
     gfx_font_set = XCreateFontSet(gfx_display, gfx_font, &missing_charset_list_return,
             &missing_charset_count_return, &def_string_return);
-	gfx_font_struct = XLoadQueryFont(gfx_display, gfx_font);
-	font_v_offset = gfx_font_struct->ascent + gfx_font_struct->descent;
-    
-	/* Waits for the MapNotify event and then proceeds*/ 
+    gfx_font_struct = XLoadQueryFont(gfx_display, gfx_font);
+    font_v_offset = gfx_font_struct->ascent + gfx_font_struct->descent;
+
+    /* Waits for the MapNotify event and then proceeds*/
     for (;;)
     {
         XEvent e;
@@ -134,6 +134,31 @@ void gfx_wstr( int x, int y, wchar_t* string, int num_wchars )
 {
     XwcDrawString(gfx_display, gfx_window, gfx_font_set, gfx_gc, x, y + font_v_offset, string, num_wchars);
 }
+
+/* Draw a wchar-string */
+void gfx_draw_str_multiline( int x, int y, char* string, int n, int max_width)
+{
+    int string_width = XTextWidth(gfx_font_struct, string, n);
+
+    float factor = (float)string_width/max_width;
+
+    if (factor < 1.0)
+        XmbDrawString(gfx_display, gfx_window, gfx_font_set, gfx_gc, x, y + font_v_offset, string, n);
+    else
+    {
+        int row = (int) (n/factor);
+        int i = 1;
+        for (int cur = 0; cur < n; )
+        {
+            size_t c = (cur + row) < n ? row : (n - cur);
+            XmbDrawString(gfx_display, gfx_window, gfx_font_set, gfx_gc, x, y + i * font_v_offset, &string[cur], c);
+            cur += c;
+            i++;
+        }
+
+    }
+}
+
 
 /* Change the current drawing color. */
 void gfx_color( int r, int g, int b )
