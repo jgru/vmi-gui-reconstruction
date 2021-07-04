@@ -12,7 +12,7 @@
 
 #ifndef GFX_H
 #define GFX_H
-
+#include <wchar.h>
 /* Open a new graphics window. */
 void gfx_open( int width, int height, const char* title );
 

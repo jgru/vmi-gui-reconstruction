@@ -18,24 +18,25 @@
 #include "gfx.h"
 
 /*
-gfx_open creates several X11 objects, and stores them in globals
-for use by the other functions in the library.
+ * gfx_open creates several X11 objects, and stores them in globals
+ * for use by the other functions in the library.
 */
-
 static Display* gfx_display=0;
-static Window  gfx_window;
-static GC      gfx_gc;
+static Window gfx_window;
+static GC gfx_gc;
 static Colormap gfx_colormap;
-static int      gfx_fast_color_mode = 0;
+static int gfx_fast_color_mode = 0;
+
+static char* gfx_font = "*normal--12*";
 static XFontSet gfx_font_set;
+static XFontStruct* gfx_font_struct;
+static int font_v_offset = 0; 
 
 /* These values are saved by gfx_wait then retrieved later by gfx_xpos and gfx_ypos. */
-
 static int saved_xpos = 0;
 static int saved_ypos = 0;
 
 /* Open a new graphics window. */
-
 void gfx_open( int width, int height, const char* title )
 {
     gfx_display = XOpenDisplay(0);
@@ -80,10 +81,14 @@ void gfx_open( int width, int height, const char* title )
     char** missing_charset_list_return = NULL;
     int missing_charset_count_return = 0 ;
     char* def_string_return = NULL;
-    gfx_font_set = XCreateFontSet(gfx_display, "*normal--12*", &missing_charset_list_return,
+	
+	/* Prepares fonts */
+    gfx_font_set = XCreateFontSet(gfx_display, gfx_font, &missing_charset_list_return,
             &missing_charset_count_return, &def_string_return);
-
-    // Wait for the MapNotify event
+	gfx_font_struct = XLoadQueryFont(gfx_display, gfx_font);
+	font_v_offset = gfx_font_struct->ascent + gfx_font_struct->descent;
+    
+	/* Waits for the MapNotify event and then proceeds*/ 
     for (;;)
     {
         XEvent e;
@@ -92,7 +97,7 @@ void gfx_open( int width, int height, const char* title )
             break;
     }
 }
-
+/* Clean up */
 void gfx_close()
 {
     XFreeFontSet(gfx_display, gfx_font_set);
@@ -100,31 +105,34 @@ void gfx_close()
     XCloseDisplay(gfx_display);
 }
 
-/* Draw a single point at (x,y) */
+/* Draws a single point at (x,y) */
 void gfx_point( int x, int y )
 {
     XDrawPoint(gfx_display, gfx_window, gfx_gc, x, y);
 }
 
+/* Draw the outline of a rectangle */
 void gfx_rect( int x, int y, int w, int h)
 {
     XDrawRectangle(gfx_display, gfx_window, gfx_gc, x, y, w, h);
 }
 
+/* Draws a filled rectangle */
 void gfx_fill_rect( int x, int y, int w, int h)
 {
     XFillRectangle(gfx_display, gfx_window, gfx_gc, x, y, w, h);
 }
 
-/* Draw a line from (x1,y1) to (x2,y2) */
+/* Draws a line from (x1,y1) to (x2,y2) */
 void gfx_line( int x1, int y1, int x2, int y2 )
 {
     XDrawLine(gfx_display, gfx_window, gfx_gc, x1, y1, x2, y2);
 }
 
+/* Draw a wchar-string */
 void gfx_wstr( int x, int y, wchar_t* string, int num_wchars )
 {
-    XwcDrawString(gfx_display, gfx_window, gfx_font_set, gfx_gc, x, y, string, num_wchars);
+    XwcDrawString(gfx_display, gfx_window, gfx_font_set, gfx_gc, x, y + font_v_offset, string, num_wchars);
 }
 
 /* Change the current drawing color. */
