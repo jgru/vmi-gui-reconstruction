@@ -722,9 +722,11 @@ struct wnd_container* construct_wnd_container(vmi_instance_t vmi, vmi_pid_t pid,
     if (VMI_FAILURE != vmi_read_addr_va(vmi, win + off.wnd_strname_offset + off.large_unicode_buf_offset, pid, &str_name_off))
     {
         /*
-             * Length is always 0, therefore always read 255 chars
-             * https://github.com/volatilityfoundation/volatility/blob/a438e768194a9e05eb4d9ee9338b881c0fa25937/volatility/plugins/gui/vtypes/win7_sp1_x86_vtypes_gui.py#L650
-             */
+         * Length is always 0, therefore always read 255 chars
+         * https://github.com/volatilityfoundation/volatility/blob/a438e768194a\
+         * 9e05eb4d9ee9338b881c0fa25937/volatility/plugins/gui/vtypes/win7_sp1_\
+         * x86_vtypes_gui.py#L650
+         */
         wchar_t* wn = read_wchar_str_pid(vmi, str_name_off, (size_t)255, pid);
 
         if (wn)
@@ -766,8 +768,6 @@ struct wnd_container* construct_wnd_container(vmi_instance_t vmi, vmi_pid_t pid,
 status_t traverse_windows_pid(vmi_instance_t vmi, addr_t* win,
     vmi_pid_t pid, GHashTable* seen_windows, GArray* result_windows, int level)
 {
-    printf("=====================================\n");
-    printf("Level %d\n", level);
     addr_t* cur = malloc(sizeof(addr_t));
     *cur = *win;
 
@@ -782,16 +782,12 @@ status_t traverse_windows_pid(vmi_instance_t vmi, addr_t* win,
             break;
         }
 
-        /* Keeps track of current window to detect cycles later */
+        /* Keeps track of current window in order to detect cycles later */
         g_hash_table_add(seen_windows, (gpointer)cur);
+        /* Stores current window for ordered traversal */
         g_array_append_val(wins, cur);
 
-        /* Stores window as result for drawing it later */
-        //if (is_wnd_visible(vmi, pid, *cur))
-        //{
-        //    g_array_append_val(result_windows, *cur);
-        //}
-
+        /* Advances to next window */
         addr_t* next = malloc(sizeof(addr_t));
 
         if (VMI_FAILURE == vmi_read_addr_va(vmi, *cur + off.spwnd_next, pid, next))
@@ -799,10 +795,17 @@ status_t traverse_windows_pid(vmi_instance_t vmi, addr_t* win,
 
         cur = next;
     }
-    size_t l = wins->len;
-    for (size_t i=0; i < l; i++)
+
+    size_t len = wins->len;
+
+    /*
+     * Traverses the windows in the reverse order.
+     * This is important to ensure correct Z ordering, since the last window
+     * in the linked list is the bottom one.
+     */
+    for (size_t i=0; i < len; i++)
     {
-        addr_t* val = g_array_index(wins, addr_t*, l-(i+1));
+        addr_t* val = g_array_index(wins, addr_t*, len-(i+1));
 
         printf("\t\tWindow at %" PRIx64 "\n", *val);
 
@@ -814,25 +817,22 @@ status_t traverse_windows_pid(vmi_instance_t vmi, addr_t* win,
 
         addr_t* child = malloc(sizeof(uint64_t));
 
+        /* Reads the window's child */
         if (VMI_FAILURE == vmi_read_addr_va(vmi, *val + off.spwnd_child, pid, child))
             return VMI_FAILURE;
 
         if (*child)
         {
+            /* Exits the loop, if a window was already processed before */
             if (g_hash_table_contains(seen_windows, (gconstpointer) child))
-                return VMI_SUCCESS;
-
-            printf("=====================================\n");
-            printf("Level %d\n", level +1);
-            //GHashTable *children = g_hash_table_new(g_int64_hash, g_int64_equal);
+                break;
+            /*
+             * Recursive call to process the windows children, its siblings and
+             * grandchildren and their respective siblings, grandgrandchildren
+             * and so on.
+             */
             traverse_windows_pid(vmi, child, pid, seen_windows, result_windows, level+1);
-            //g_hash_table_destroy(children);
-            printf("Level %d\n", level +1);
-            printf("=====================================\n");
-
         }
-        printf("Level %d\n", level);
-        printf("=====================================\n");
     }
 
     return VMI_SUCCESS;
@@ -1423,7 +1423,6 @@ int main (int argc, char** argv)
 
             struct wnd_container* w = NULL;
 
-            //g_array_sort (windows, sort_wnd_container);
             for (size_t j = 0; j < windows->len; j++)
             {
                 w = g_array_index(windows, struct wnd_container*, j);
