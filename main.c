@@ -218,10 +218,10 @@ struct Offsets
 } off;
 
 int sort_wnd_container(gconstpointer a, gconstpointer b)
-{   
-    int res = 0; 
-    res = ((struct wnd_container *) b)->level - ((struct wnd_container *) a)->level;
-    return res; 
+{
+    int res = 0;
+    res = ((struct wnd_container*) b)->level - ((struct wnd_container*) a)->level;
+    return res;
 }
 
 status_t find_offsets(vmi_instance_t vmi)  // const char *win32k_config,
@@ -425,43 +425,44 @@ wchar_t* read_wchar_str(vmi_instance_t vmi, addr_t start, size_t len)
 }
 void draw_single_wnd_container(struct wnd_container* w)
 {
- 
+
     if ((w->style & WS_VISIBLE) &&
         !(w->style & WS_DISABLED) &&
         !(w->style & WS_MINIMIZE) &&
         !(w->exstyle & WS_EX_TRANSPARENT)
     )
-    {   int width = w->r.x1-w->r.x0;
-        int height = w->r.y1-w->r.y0; 
+    {
+        int width = w->r.x1-w->r.x0;
+        int height = w->r.y1-w->r.y0;
 
 
 
         gfx_color(80*w->level, 80*w->level, 80*w->level);
-        gfx_fill_rect(w->r.x0, w->r.y0, width,height);
+        gfx_fill_rect(w->r.x0, w->r.y0, width, height);
 
         gfx_color(0, 0, 0);
         gfx_rect(w->r.x0, w->r.y0, width, height);
 
         gfx_color(85*w->level, 85*w->level, 85*w->level);
         gfx_fill_rect(w->rclient.x0, w->rclient.y0, w->rclient.x1-w->rclient.x0, w->rclient.y1-w->rclient.y0);
-    
+
         gfx_color(0, 0, 0);
         gfx_rect(w->rclient.x0, w->rclient.y0, w->rclient.x1-w->rclient.x0, w->rclient.y1-w->rclient.y0);
-    
-            if (w->text)
-            {               
-                if( width > 0)    
-                    gfx_draw_str_multiline(w->r.x0 + TEXT_OFFSET, w->r.y0, w->text, strlen(w->text), width);
-                else 
-                    gfx_draw_str(w->r.x0 + TEXT_OFFSET, w->r.y0, w->text, strlen(w->text));
-            }
+
+        if (w->text)
+        {
+            if ( width > 0)
+                gfx_draw_str_multiline(w->r.x0 + TEXT_OFFSET, w->r.y0, w->text, strlen(w->text), width);
+            else
+                gfx_draw_str(w->r.x0 + TEXT_OFFSET, w->r.y0, w->text, strlen(w->text));
         }
-        gfx_flush();
+    }
+    gfx_flush();
 }
 status_t draw_single_window(vmi_instance_t vmi, addr_t win, vmi_pid_t pid)
 {
     status_t ret = VMI_FAILURE;
-    
+
     uint32_t x0 = 0;
     uint32_t x1 = 0;
     uint32_t y0 = 0;
@@ -504,7 +505,7 @@ status_t draw_single_window(vmi_instance_t vmi, addr_t win, vmi_pid_t pid)
 
         gfx_color(0, 0, 0);
         gfx_rect(x0, y0, x1-x0, y1-y0);
-        
+
         ret = vmi_read_32_va(vmi, win + off.rc_client_offset + off.rect_left_offset, pid, (uint32_t*)&rx0);
         ret = vmi_read_32_va(vmi, win + off.rc_client_offset + off.rect_right_offset, pid, (uint32_t*)&rx1);
         ret = vmi_read_32_va(vmi, win + off.rc_client_offset + off.rect_top_offset, pid, (uint32_t*)&ry0);
@@ -515,7 +516,7 @@ status_t draw_single_window(vmi_instance_t vmi, addr_t win, vmi_pid_t pid)
 
         gfx_color(0, 0, 0);
         gfx_rect(rx0, ry0, rx1-rx0, ry1-ry0);
-        
+
         addr_t str_name_off;
 
         /* Retrieves window name */
@@ -530,14 +531,14 @@ status_t draw_single_window(vmi_instance_t vmi, addr_t win, vmi_pid_t pid)
             if (wn)
             {
                 size_t l = wcslen(wn);
-                char *wn_ascii = (char *)malloc(sizeof(char) * (l + 1));
-                size_t c = wcstombs(wn_ascii, wn, l);   
-                
+                char* wn_ascii = (char*)malloc(sizeof(char) * (l + 1));
+                size_t c = wcstombs(wn_ascii, wn, l);
+
                 printf("\t\t\tWindow Name: %s\n", wn_ascii);
                 printf("\t\t\tDims: %d x %d \n", x1-x0, y1-y0);
-                if( x1-x0 > 0)    
+                if ( x1-x0 > 0)
                     gfx_draw_str_multiline(x0, y0, wn_ascii, c, x1-x0);
-                else 
+                else
                     gfx_draw_str(x0, y0, wn_ascii, c);
             }
         }
@@ -644,21 +645,21 @@ status_t print_window(vmi_instance_t vmi, addr_t win, vmi_pid_t pid, GHashTable*
 }
 
 GHashTable* copy_hashtable(GHashTable* src)
-{   
+{
     GHashTable* new = g_hash_table_new(g_int64_hash, g_int64_equal);
     guint l = g_hash_table_size(src);
-    
+
     gpointer* entries = g_hash_table_get_keys_as_array(src, &l);
 
     for (size_t i=0; i<l; i++)
     {
-        if(entries[i])
+        if (entries[i])
             g_hash_table_add(new, entries[i]);
 
     }
-    g_free(entries); 
+    g_free(entries);
 
-    return new; 
+    return new;
 }
 
 /* Determine, if windows is visible; important since invisible windows might have visible children */
@@ -672,13 +673,14 @@ bool is_wnd_visible(vmi_instance_t vmi, vmi_pid_t pid, addr_t wnd)
     if (style & WS_VISIBLE)
         return true;
 
-    return false; 
+    return false;
 }
 
 struct wnd_container* construct_wnd_container(vmi_instance_t vmi, vmi_pid_t pid, addr_t win, int level)
-{   printf("Constructing wnd_container\n");
+{
+    printf("Constructing wnd_container\n");
     status_t ret = VMI_FAILURE;
-    
+
     uint32_t x0 = 0;
     uint32_t x1 = 0;
     uint32_t y0 = 0;
@@ -709,13 +711,13 @@ struct wnd_container* construct_wnd_container(vmi_instance_t vmi, vmi_pid_t pid,
     uint16_t atom = 0;
     ret = vmi_read_16_va(vmi, pcls + off.cls_atom_offset, pid, &atom);
 
-    ret = vmi_read_32_va(vmi, win + off.rc_client_offset + off.rect_left_offset, pid, (uint32_t *)&rx0);
-    ret = vmi_read_32_va(vmi, win + off.rc_client_offset + off.rect_right_offset, pid, (uint32_t *)&rx1);
-    ret = vmi_read_32_va(vmi, win + off.rc_client_offset + off.rect_top_offset, pid, (uint32_t *)&ry0);
-    ret = vmi_read_32_va(vmi, win + off.rc_client_offset + off.rect_bottom_offset, pid, (uint32_t *)&ry1);
+    ret = vmi_read_32_va(vmi, win + off.rc_client_offset + off.rect_left_offset, pid, (uint32_t*)&rx0);
+    ret = vmi_read_32_va(vmi, win + off.rc_client_offset + off.rect_right_offset, pid, (uint32_t*)&rx1);
+    ret = vmi_read_32_va(vmi, win + off.rc_client_offset + off.rect_top_offset, pid, (uint32_t*)&ry0);
+    ret = vmi_read_32_va(vmi, win + off.rc_client_offset + off.rect_bottom_offset, pid, (uint32_t*)&ry1);
 
     addr_t str_name_off;
-    char *wn_ascii = NULL; 
+    char* wn_ascii = NULL;
     /* Retrieves window name */
     if (VMI_FAILURE != vmi_read_addr_va(vmi, win + off.wnd_strname_offset + off.large_unicode_buf_offset, pid, &str_name_off))
     {
@@ -723,59 +725,59 @@ struct wnd_container* construct_wnd_container(vmi_instance_t vmi, vmi_pid_t pid,
              * Length is always 0, therefore always read 255 chars
              * https://github.com/volatilityfoundation/volatility/blob/a438e768194a9e05eb4d9ee9338b881c0fa25937/volatility/plugins/gui/vtypes/win7_sp1_x86_vtypes_gui.py#L650
              */
-        wchar_t *wn = read_wchar_str_pid(vmi, str_name_off, (size_t)255, pid);
+        wchar_t* wn = read_wchar_str_pid(vmi, str_name_off, (size_t)255, pid);
 
         if (wn)
         {
             size_t l = wcslen(wn);
-            wn_ascii = (char *)malloc(sizeof(char) * (l + 1));
+            wn_ascii = (char*)malloc(sizeof(char) * (l + 1));
             size_t c = wcstombs(wn_ascii, wn, l);
             wn_ascii[c] = '\0'; /* Terminate ascii result */
         }
     }
 
-    if(ret == VMI_FAILURE)
-        return NULL; 
+    if (ret == VMI_FAILURE)
+        return NULL;
 
     /* Populate struct, if no failure occured */
-    struct wnd_container *wc = (struct wnd_container*) malloc(sizeof(struct wnd_container));
+    struct wnd_container* wc = (struct wnd_container*) malloc(sizeof(struct wnd_container));
     memset(wc, 0, sizeof(struct wnd_container));
 
-    wc->r.x0 = x0; 
+    wc->r.x0 = x0;
     wc->r.x1 = x1;
     wc->r.y0 = y0;
     wc->r.y1 = y1;
 
-    wc->rclient.x0 = x0; 
+    wc->rclient.x0 = x0;
     wc->rclient.x1 = x1;
     wc->rclient.y0 = y0;
     wc->rclient.y1 = y1;
 
     wc->style = style;
     wc->exstyle = exstyle;
-    wc->spwnd_addr = win; 
-    wc->text = wn_ascii; 
-    wc->atom = atom; 
-    wc->level = level; 
+    wc->spwnd_addr = win;
+    wc->text = wn_ascii;
+    wc->atom = atom;
+    wc->level = level;
 
     return wc;
 }
 
 status_t traverse_windows_pid(vmi_instance_t vmi, addr_t* win,
     vmi_pid_t pid, GHashTable* seen_windows, GArray* result_windows, int level)
-{   
-    printf("=====================================\n"); 
-    printf("Level %d\n", level); 
+{
+    printf("=====================================\n");
+    printf("Level %d\n", level);
     addr_t* cur = malloc(sizeof(addr_t));
     *cur = *win;
 
     /* Needed for ordered traversal */
-    GArray* wins = g_array_new(true, true, sizeof(addr_t*)); 
-    
+    GArray* wins = g_array_new(true, true, sizeof(addr_t*));
+
     while (*cur)
-    {   
+    {
         if (g_hash_table_contains(seen_windows, (gconstpointer) cur))
-        {   
+        {
             printf("Cycle after %d siblings\n", g_hash_table_size(seen_windows));
             break;
         }
@@ -786,7 +788,7 @@ status_t traverse_windows_pid(vmi_instance_t vmi, addr_t* win,
 
         /* Stores window as result for drawing it later */
         //if (is_wnd_visible(vmi, pid, *cur))
-        //{   
+        //{
         //    g_array_append_val(result_windows, *cur);
         //}
 
@@ -797,18 +799,18 @@ status_t traverse_windows_pid(vmi_instance_t vmi, addr_t* win,
 
         cur = next;
     }
-    size_t l = wins->len; 
+    size_t l = wins->len;
     for (size_t i=0; i < l; i++)
     {
-        addr_t* val = g_array_index(wins, addr_t*, l-(i+1)); 
+        addr_t* val = g_array_index(wins, addr_t*, l-(i+1));
 
         printf("\t\tWindow at %" PRIx64 "\n", *val);
 
         if (!is_wnd_visible(vmi, pid, *val))
-            continue; 
+            continue;
 
         struct wnd_container* wc = construct_wnd_container(vmi, pid, *val, level);
-        g_array_append_val(result_windows, wc);   
+        g_array_append_val(result_windows, wc);
 
         addr_t* child = malloc(sizeof(uint64_t));
 
@@ -816,21 +818,21 @@ status_t traverse_windows_pid(vmi_instance_t vmi, addr_t* win,
             return VMI_FAILURE;
 
         if (*child)
-        {   
-            if(g_hash_table_contains(seen_windows, (gconstpointer) child))
-                return VMI_SUCCESS; 
+        {
+            if (g_hash_table_contains(seen_windows, (gconstpointer) child))
+                return VMI_SUCCESS;
 
-            printf("=====================================\n"); 
-            printf("Level %d\n", level +1); 
+            printf("=====================================\n");
+            printf("Level %d\n", level +1);
             //GHashTable *children = g_hash_table_new(g_int64_hash, g_int64_equal);
             traverse_windows_pid(vmi, child, pid, seen_windows, result_windows, level+1);
             //g_hash_table_destroy(children);
-            printf("Level %d\n", level +1); 
-            printf("=====================================\n"); 
-            
+            printf("Level %d\n", level +1);
+            printf("=====================================\n");
+
         }
-        printf("Level %d\n", level); 
-        printf("=====================================\n"); 
+        printf("Level %d\n", level);
+        printf("=====================================\n");
     }
 
     return VMI_SUCCESS;
@@ -1412,28 +1414,29 @@ int main (int argc, char** argv)
             printf("Retrieving windows for desktop %" PRIx64 "\n", winstas[i].desktops[j]);
 
             retrieve_windows_from_desktop(vmi, winstas[i].desktops[j], winstas[i].providing_pid, windows);
-            
+
             /* Prepare drawing */
             gfx_open(800, 600, "GUI Reconstruction");
             gfx_clear_color(255, 255, 255);
             gfx_clear();
             gfx_color(0, 0, 0);
-            
-            struct wnd_container* w = NULL; 
-            
+
+            struct wnd_container* w = NULL;
+
             //g_array_sort (windows, sort_wnd_container);
             for (size_t j = 0; j < windows->len; j++)
             {
-                w = g_array_index(windows, struct wnd_container *, j);
-                if (w){
+                w = g_array_index(windows, struct wnd_container*, j);
+                if (w)
+                {
                     draw_single_wnd_container(w);
                     printf("%s - %d\n", w->text, w->level);
-                    if(w->exstyle & WS_EX_TOPMOST)
-                        printf("Topmost!\n"); 
-                        
+                    if (w->exstyle & WS_EX_TOPMOST)
+                        printf("Topmost!\n");
+
                 }
             }
-            
+
             /*
             for(int l = 0; l<5; l++){
 
@@ -1453,10 +1456,10 @@ int main (int argc, char** argv)
                     w = g_array_index(windows, struct wnd_container *, j);
 
                     if(w->exstyle & WS_EX_TOPMOST)
-                        printf("Topmost!\n"); 
+                        printf("Topmost!\n");
                     draw_single_wnd_container(w);
                     printf("%s - %d\n", w->text, w->level);
-                    
+
                 }
                 */
             char c = 'a';
