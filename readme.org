@@ -1,0 +1,80 @@
+* vmi-reconstruct-gui
+`vmi-reconstruct-gui` is a reimplementation of Brendan Dolan-Gavitt's [[https://volatility-labs.blogspot.com/2012/10/movp-43-taking-screenshots-from-memory.html][Volatility screenshot-plugin]] using [[https://github.com/libvmi/libvmi][libvmi]] to reconstruct the GUI of a Windows 7-box running as a Xen-guest. 
+
+** Usage
+To use it determine the domaim identifier of the Win 7 VM in question 
+#+BEGIN_SRC shell
+sudo ./vmi-reconstruct-gui -d 1 -j /usr/local/share/vmi/windows7-sp1.json
+#+END_SRC
+
+** Background 
+
+In the windows system, all active processes are connected together to form a doubly linked list. The table header is the global variable PsActiveProcessHead. When a process is created, its ActiveProcessList field will be added as a node to this list; When it is deleted, it is removed from the linked list. If Windows needs to enumerate all processes, you can directly manipulate the linked list [fn:1].
+
+ PsActiveProcessHead is the head of the active process chain. In theory, it is the Blink of the EPROCESS structure member ActiveProcessLinks of the second process, and the Flink of the EProcess structure member ActiveProcessLinks of the last process. The second process is the System process with a process ID equal to 4 [fn:1].
+
+*** Procedure to receive windows
+The following procedure is applied to reconstruct the GUI windows:
+
+ 1. Find all Window Stations (WinStas) 
+    - Traverse linked list of _EPROCESS-structs
+      - For each process:
+	1. Find ThreadListHead
+	2. Traverse linked list of _ETHREAD-structs
+	   - Check, if current _ETHREAD is a GUI thread
+	     This is done by using the TEB-struct in _KTHREAD, which houses a Win32ThreadInfo-struct, if it is a GUI thread
+	     1) If current _ETHREAD is a GUI-thread:
+		Retrieve pointer pwinsta to tagWINDOWSTATION-struct
+	     2) If current _ETHREAD is not a GUI-thread, continue
+ 2. Parse each tagWINDOWSTATION-struct
+    1. Retrieve session ID
+    2. Retrieve atom table offset
+    3. Retrieve flags (specifying, if interactive or not)
+    4. Traverse all tagDESKTOP-structs associated with the winsta
+       1. Find rpdesklist-pointer
+       2. Traverse linked list of desktops by using their rpnext-pointers
+ 3. Get a list of all windows associated with a desktop in their Z-order (bottom to top)
+    - For each interactive window station
+      - For each associated desktop
+	1. Find the root window
+	   1. Find _DESKTOPINFO
+	   2. Find spwnd (struct pointer to tagWND-struct)
+	2. Allocate an empty list of windows
+	3. Form a list of top windows by following pNextWindow of the tagWND-struct until NULL or seen 
+	   1. Check the visibility of each windo (WS_VISIBLE-flag has to be set)
+	      1. If not visible, continue
+	      2. If visible, add to list of visible windows
+	   2. Traverse list of visbile windows in reverse order
+	      1. For each window in list, get child window and recurse to 3.3
+
+After the depth-ordered list of the addresses to all visible tagWND-structs of a desktop is available, this list can be traverse and each tagWND-struct can be parsed. 
+Most important aspects of a tagWND-struct are:
+
+*** Search JSON-files generated from PDB
+# Find offset to teb
+cat /usr/local/share/vmi/windows7-sp1.json | jq '."user_types"."_KTHREAD".fields.Teb' 
+# tagDESKTOPINFO struct
+# Find thread info from _TEB, Win32ThreadInfo at offset 64
+cat /usr/local/share/vmi/win32k.json| jq '."$STRUCTS"._TEB[1].Win32ThreadInfo'
+# tagTHREADINFO contains a pointer to a tagDESKTOPINFO-struct at offset 204 (0xCC)
+cat /usr/local/share/vmi/win32k.json| jq '."$STRUCTS".tagTHREADINFO[1].pDeskInfo'
+# The tagDESKTOPINFO struct
+cat /usr/local/share/vmi/win32k.json| jq '."$STRUCTS".tagDESKTOPINFO[1]'
+# tagDESKTOPINFO contains pointer to actual window reference -- undocumented
+cat /usr/local/share/vmi/win32k.json| jq '."$STRUCTS".tagDESKTOPINFO[1].spwnd' # see https://systemroot.gitee.io/pages/apiexplorer/d2/d9/inc_2user_8h-source.html
+# tagWND struct contains rcWindow at offset 64, which is of type tagRECT
+cat /usr/local/share/vmi/win32k.json| jq '."$STRUCTS".tagWND[1].rcWindow' 
+# 
+cat /usr/local/share/vmi/win32k.json| jq '."$STRUCTS".tagRECT'
+
+* Footnotes
+
+[fn:1] https://titanwolf.org/Network/Articles/Article?AID=0de2af5a-cff3-49f8-b7d6-c2f9369ff313#gsc.tab=0
+
+** References 
+- https://libvmi.com/api/
+- https://www.cc.gatech.edu/~brendan/volatility/
+- https://resources.infosecinstitute.com/topic/windows-gui-forensics-session-objects-window-stations-and-desktop/
+- https://reactos.org/wiki/Techwiki:Win32k/DESKTOP
+- https://www.microsoftpressstore.com/articles/article.aspx?p=2233328&seqNum=4
+- https://titanwolf.org/Network/Articles/Article?AID=0de2af5a-cff3-49f8-b7d6-c2f9369ff313#gsc.tab=0
