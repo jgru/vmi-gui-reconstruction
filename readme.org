@@ -1,15 +1,19 @@
 * vmi-reconstruct-gui
+A proof-of-concept to reconstruction the GUI of Xen VM running Windows 7.
+
+** Description
 ~vmi-reconstruct-gui~ is a reimplementation of Brendan Dolan-Gavitt's [[https://volatility-labs.blogspot.com/2012/10/movp-43-taking-screenshots-from-memory.html][Volatility screenshot-plugin]] using [[https://github.com/libvmi/libvmi][libvmi]] to reconstruct the GUI of a Windows 7-box running as a Xen-guest. It was developed as a draft and blueprint to incorporate GUI forensics into the black-box binary analysis system [[https://github.com/tklengyel/drakvuf][DRAKVUF]] in the future. 
 
 This tools reconstructs each desktop, that could be found in the memory of a running guest, and shows it one after another as a wireframe. To advance the presented desktop, press any key. Note that, Windows houses a lot of empty desktops, so many of those wireframes will be blank, if there are no visible desktops. 
 [[file:res/screenshot.png]]
+
 ** Dependencies 
 ~vmi-reconstruct-gui~ depends on the following libraries:
 - libvmi
 - libx11-dev
 - glib 
 
-Please make sure to install those and then run ~make~ from within this directory.
+Please make sure to install those libaries and then run ~make~ from within this directory.
 
 ** Usage
 To use this PoC determine the Xen domain identifier of the Win 7 VM in question and run the compiled binary as illustrated below: 
@@ -22,56 +26,69 @@ VM_NAME="your-vm-name"
 DOM_ID=$(sudo xl list | grep $VM_NAME | awk '{print $2}')
 
 # Set path to separately created intermediate symbol file 
-$IST_FILE="/usr/local/share/vmi/windows7-sp1.json"
+IST_FILE="/usr/local/share/vmi/windows7-sp1.json"
 
 # Reconstruct the gui
 sudo ./vmi-reconstruct-gui -d $DOM_ID -j $IST_FILE
 #+END_SRC
 
 ** Background on the working of the tool
+The Windows GUI subsystem is structured by the concepts of sessions, window stations, desktops and windows. A session is the logon-environment of a user. Each session has multiple window stations -- interactive ones for handling user input and non-interactive ones for services. Each window station has a so-called atom table, which is basically a hashtable of strings and a notable attribute in the context of GUI forensics. The atom entries are shared by processes and -- among other things -- used to track classes of GUI objects.
+Most important is, that each window station contains a list of associated desktops. Those house all GUI objects, such as windows, buttons, menus and the like, as the name implies [1].   
 
-*** Procedure to receive windows
+To perform a reconstruction of the GUI presented to the use, the interactive window stations and all of their non-empty desktops have to be found. 
+One of approach of finding all windows stations is to look at each thread of each process and determine, if it is a GUI-thread. Windows holds its processes in a doubly-link list of ~_EPROCESS~-structs, which contain an ActiveProcessList-field. The kernel symbol ~PsActiveProcessHead~ points to the head of this list of active processes. Each process has one or more threads. If the thread environment block contains a pointer to a Win32Threadinfo-struct (and an ~tagDESKTOPINFO~-struct) it is GUI-thread. If this is the case, the housing window station can be retrieved by looking at the Win32Threadinfo-struct more closely, which contains a field named ~pwinsta~ -- a pointer to the window station. The address to the windowstation can then be collected in a set. Afterwards all windows stations can be traversed and all all desktops and then all windows can be retrieved [2]. For a detailed description of the procedure look at the following section.
+
+*** Procedure to find windows
 The following procedure is applied to reconstruct the GUI windows:
 
  1. Find all Window Stations (WinStas) 
-    - Traverse linked list of _EPROCESS-structs
+    - Traverse linked list of ~_EPROCESS~-structs
       - For each process:
 	1. Find ThreadListHead
-	2. Traverse linked list of _ETHREAD-structs
-	   - Check, if current _ETHREAD is a GUI thread
-	     This is done by using the TEB-struct in _KTHREAD, which houses a Win32ThreadInfo-struct, if it is a GUI thread
-	     1) If current _ETHREAD is a GUI-thread:
+	2. Traverse linked list of ~_ETHREAD~-structs
+	   - Check, if current ~_ETHREAD~ is a GUI thread
+	     This is done by using the ~TEB~-struct in ~_KTHREAD~, which houses a Win32ThreadInfo-struct, if it is a GUI thread
+	     1) If current ~_ETHREAD~ is a GUI-thread:
 		Retrieve pointer pwinsta to tagWINDOWSTATION-struct
-	     2) If current _ETHREAD is not a GUI-thread, continue
+	     2) If current ~_ETHREAD~ is not a GUI-thread, continue
  2. Parse each tagWINDOWSTATION-struct
     1. Retrieve session ID
-    2. Retrieve atom table offset
+    2. Retrieve offset to ~_RTL_ATOM_TABLE~ and parse it (not detailed here)
     3. Retrieve flags (specifying, if interactive or not)
-    4. Traverse all tagDESKTOP-structs associated with the winsta
-       1. Find rpdesklist-pointer
-       2. Traverse linked list of desktops by using their rpnext-pointers
+    4. Traverse all ~tagDESKTOP~-structs associated with the winsta
+       1. Find ~rpdesklist~-pointer to the head of the linked list of associated desktops
+       2. Traverse linked list of desktops by using their ~rpnext~-pointers
  3. Get a list of all windows associated with a desktop in their Z-order (bottom to top)
     - For each interactive window station
       - For each associated desktop
 	1. Find the root window
-	   1. Find _DESKTOPINFO
-	   2. Find spwnd (struct pointer to tagWND-struct)
+	   1. Find ~_DESKTOPINFO~
+	   2. Find ~spwnd~ (struct pointer to the first ~tagWND~-struct)
 	2. Allocate an empty list of windows
-	3. Form a list of top windows by following pNextWindow of the tagWND-struct until NULL or seen 
-	   1. Check the visibility of each windo (WS_VISIBLE-flag has to be set)
+	3. Form a list of top windows by following pNextWindow of the ~tagWND~-struct until NULL or seen 
+	   1. Check the visibility of each windo (~WS_VISIBLE~-flag has to be set)
 	      1. If not visible, continue
 	      2. If visible, add to list of visible windows
 	   2. Traverse list of visbile windows in reverse order
 	      1. For each window in list, get child window and recurse to 3.3
 
-After the depth-ordered list of the addresses to all visible tagWND-structs of a desktop is available, this list can be traverse and each tagWND-struct can be parsed. 
-Most important aspects of a tagWND-struct are:
+After the depth-ordered list of the addresses to all visible ~tagWND~-structs of a desktop is available, this list can be traverse and each tagWND-struct can be parsed. 
 
+Note, that he followed a slightly different approach and retrieved the top window directly by utilizing Win32Threadinfo->pDeskInfo->spwnd
+
+** Footnotes
+[1] Cf. Ligh, M. H., Case, A., Levy, J., & Walters, A. (2014). The art of memory forensics. John Wiley & Sons. p. 408 f.
+[2] This information is based Brendan Dolan-Gavitt's work on GDI utilities.  https://www.cc.gatech.edu/~brendan/volatility/
 
 ** References 
+- https://www.cc.gatech.edu/~brendan/volatility/
+- https://www.tophertimzen.com/resources/cs407/slides/week07_01-GUI.html#slide1
+- https://www.tophertimzen.com/resources/cs407/slides/week07_02-GUI2.html#slide1
 - https://libvmi.com/api/
 - https://www.cc.gatech.edu/~brendan/volatility/
 - https://resources.infosecinstitute.com/topic/windows-gui-forensics-session-objects-window-stations-and-desktop/
 - https://reactos.org/wiki/Techwiki:Win32k/DESKTOP
 - https://www.microsoftpressstore.com/articles/article.aspx?p=2233328&seqNum=4
 - https://titanwolf.org/Network/Articles/Article?AID=0de2af5a-cff3-49f8-b7d6-c2f9369ff313#gsc.tab=0
+- https://code.google.com/archive/p/volatility/issues/131
