@@ -44,45 +44,42 @@ One of approach of finding all windows stations is to look at each thread of eac
 
 *** Procedure to find windows
 The following procedure is applied to reconstruct the GUI windows:
+**** Retrieval of window stations
+To find all Window Stations (WinStas), traverse the linked list of ~_EPROCESS~-structs and perform the following steps for each process:
+1. Find ThreadListHead
+2. Traverse linked list of ~_ETHREAD~-structs and check, if current ~_ETHREAD~ is a GUI thread
+   This is done by using the ~TEB~-struct in ~_KTHREAD~, which houses a Win32ThreadInfo-struct, if it is a GUI thread
+   1. If current ~_ETHREAD~ is a GUI-thread, retrieve pointer pwinsta to tagWINDOWSTATION-struct
+   2. If current ~_ETHREAD~ is not a GUI-thread, continue
+**** Parsing of window stations
+To parse each tagWINDOWSTATION-struct, do
+1. Retrieve session ID
+2. Retrieve offset to ~_RTL_ATOM_TABLE~ and parse it (not detailed here)
+3. Retrieve flags (specifying, if interactive or not)
+4. Traverse all ~tagDESKTOP~-structs associated with the winsta
+   1. Find ~rpdesklist~-pointer to the head of the linked list of associated desktops
+   2. Traverse linked list of desktops by using their ~rpnext~-pointers
+**** Retrieval of windows
+To get a list of all windows associated with a desktop in their Z-order (bottom to top), traverse each interactive window station and perform for each associated desktop the following steps:
+1. Find the root window
+   1. Find ~_DESKTOPINFO~
+   2. Find ~spwnd~ (struct pointer to the first ~tagWND~-struct)
+2. Allocate an empty list of windows
+3. Form a list of top windows by following pNextWindow of the ~tagWND~-struct until NULL or seen 
+   1. Check the visibility of each window (~WS_VISIBLE~-flag has to be set)
+      - If not visible, continue
+      - If visible, add to list of visible windows
+4. Traverse list of visbile windows in reverse order
+   - For each window in list, get child window and recurse to 3.3
 
- 1. Find all Window Stations (WinStas) 
-    - Traverse linked list of ~_EPROCESS~-structs
-      - For each process:
-	1. Find ThreadListHead
-	2. Traverse linked list of ~_ETHREAD~-structs
-	   - Check, if current ~_ETHREAD~ is a GUI thread
-	     This is done by using the ~TEB~-struct in ~_KTHREAD~, which houses a Win32ThreadInfo-struct, if it is a GUI thread
-	     1) If current ~_ETHREAD~ is a GUI-thread:
-		Retrieve pointer pwinsta to tagWINDOWSTATION-struct
-	     2) If current ~_ETHREAD~ is not a GUI-thread, continue
- 2. Parse each tagWINDOWSTATION-struct
-    1. Retrieve session ID
-    2. Retrieve offset to ~_RTL_ATOM_TABLE~ and parse it (not detailed here)
-    3. Retrieve flags (specifying, if interactive or not)
-    4. Traverse all ~tagDESKTOP~-structs associated with the winsta
-       1. Find ~rpdesklist~-pointer to the head of the linked list of associated desktops
-       2. Traverse linked list of desktops by using their ~rpnext~-pointers
- 3. Get a list of all windows associated with a desktop in their Z-order (bottom to top)
-    - For each interactive window station
-      - For each associated desktop
-	1. Find the root window
-	   1. Find ~_DESKTOPINFO~
-	   2. Find ~spwnd~ (struct pointer to the first ~tagWND~-struct)
-	2. Allocate an empty list of windows
-	3. Form a list of top windows by following pNextWindow of the ~tagWND~-struct until NULL or seen 
-	   1. Check the visibility of each windo (~WS_VISIBLE~-flag has to be set)
-	      1. If not visible, continue
-	      2. If visible, add to list of visible windows
-	   2. Traverse list of visbile windows in reverse order
-	      1. For each window in list, get child window and recurse to 3.3
+After performing this last step, the depth-ordered list of the addresses to all visible ~tagWND~-structs of a desktop is available, this list can be traverse and each tagWND-struct can be parsed. 
 
-After the depth-ordered list of the addresses to all visible ~tagWND~-structs of a desktop is available, this list can be traverse and each tagWND-struct can be parsed. 
-
-Note, that he followed a slightly different approach and retrieved the top window directly by utilizing Win32Threadinfo->pDeskInfo->spwnd
+/Note, that Brendan Dolan-Gavitt followed a slightly different approach and retrieved the top window directly by utilizing the following fields:/ ~Win32Threadinfo->pDeskInfo->spwnd~
 
 ** Footnotes
-[1] Cf. Ligh, M. H., Case, A., Levy, J., & Walters, A. (2014). The art of memory forensics. John Wiley & Sons. p. 408 f.
-[2] This information is based Brendan Dolan-Gavitt's work on GDI utilities.  https://www.cc.gatech.edu/~brendan/volatility/
+[1] Cf. Ligh, M. H., Case, A., Levy, J., & Walters, A. (2014). The art of memory forensics. John Wiley & Sons. p. 408 f.   
+
+[2] This information is based Brendan Dolan-Gavitt's work on GDI utilities.  https://www.cc.gatech.edu/~brendan/volatility/  
 
 ** References 
 - https://www.cc.gatech.edu/~brendan/volatility/
