@@ -1,5 +1,5 @@
 * vmi-reconstruct-gui
-A proof-of-concept to reconstruction the GUI of Xen VM running Windows 7.
+A proof-of-concept to reconstruct the GUI of a Xen VM running Windows 7.
 
 ** :exclamation: Disclaimer
 This repository is work in progress. It currently only works with 32-bit Windows 7 SP1 systems. 
