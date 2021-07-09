@@ -20,9 +20,7 @@
 #include <glib.h>       /* Hash table */
 #include "gfx.h"        /* Graphics rendering */
 
-/* Offset to pDeskInfo member of Win32Thread-struct */
-//#define W32T__pDeskInfo_OFFSET 0x40
-//https://www.geoffchappell.com/studies/windows/km/win32k/structs/threadinfo/index.htm?tx=188
+//#define DEBUG
 
 #define LEN_WIN_LIST 0x100
 
@@ -93,7 +91,7 @@ struct wnd_container
     uint16_t atom;
     struct rect_container r;
     struct rect_container rclient;
-    char* text;
+    const char* text;
 };
 
 
@@ -257,13 +255,13 @@ status_t find_offsets(vmi_instance_t vmi)  // const char *win32k_config,
         printf("Error retrieving ThreadListHead-offset : %ld\n", off.thread_list_head_offset);
         return VMI_FAILURE;
     }
-
+#ifdef DEBUG
     printf("Relevant _EPROCESS-offsets\n");
     printf("Offset for ActiveProcessLinks:\t%ld\n", off.active_proc_links_offset);
     printf("Offset for ImageFileName:\t%ld\n", off.name_offset);
     printf("Offset for UniqueProcessId:\t%ld\n", off.pid_offset);
     printf("Offset for ThreadListHead:\t%ld\n", off.thread_list_head_offset);
-
+#endif
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(vmi, profile, "_ETHREAD", "ThreadListEntry", &off.thread_list_entry_offset))
     {
         printf("Error retrieving ThreadListEntry-offset : %ld\n", off.thread_list_entry_offset);
@@ -275,20 +273,20 @@ status_t find_offsets(vmi_instance_t vmi)  // const char *win32k_config,
         printf("Error retrieving Tcb-offset : %ld\n", off.tcb_offset);
         return VMI_FAILURE;
     }
-
+#ifdef DEBUG
     printf("\nRelevant _ETHREAD-offsets\n");
     printf("Offset for Tcb:\t%ld\n", off.tcb_offset);
     printf("Offset for ThreadListEntry:\t%ld\n", off.thread_list_entry_offset);
-
+#endif
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(vmi, profile, "_ETHREAD", "Teb", &off.teb_offset))
     {
         printf("Error retrieving Teb at offset %ld\n", off.tcb_offset);
         return VMI_FAILURE;
     }
-
+#ifdef DEBUG
     printf("\nRelevant _KTHREAD-offsets\n");
     printf("Offset for Teb:\t%ld\n", off.teb_offset);
-
+#endif
 
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(vmi, profile, "_RTL_ATOM_TABLE", "Buckets", &off.atom_table_buckets_off))
     {
@@ -302,7 +300,9 @@ status_t find_offsets(vmi_instance_t vmi)  // const char *win32k_config,
         return VMI_FAILURE;
     }
     /*
-     * Kernel-PDB-file supplies *wrong* offset, its not 0x3c! buf either 0xC, 0x18 or 0x58 (on patched versions)
+     * Kernel-PDB-file supplies *wrong* offset, its not 0x3c! buf either 0xC,
+     *  0x18 or 0x58 (on patched versions)
+     *
      * This is a preprocessor thing as stated here:
      * https://code.google.com/archive/p/volatility/issues/131
      * https://github.com/volatilityfoundation/volatility/blob/a438e768194a9e05eb4d9ee9338b881c0fa25937/volatility/plugins/gui/win32k_core.py#L659
@@ -332,13 +332,13 @@ status_t find_offsets(vmi_instance_t vmi)  // const char *win32k_config,
         printf("Error retrieving offset to Atom of _RTL_ATOM_TABLE_ENTRY\n");
         return VMI_FAILURE;
     }
-
+#ifdef DEBUG
     printf("\nRelevant ATOM-offsets\n");
     printf("Offset for Buckets:\t%ld\n", off.atom_table_buckets_off);
     printf("Offset for NumBuckets:\t%ld\n", off.atom_table_num_buckets_off);
     printf("Offset for Atom in AtomEntry:\t%ld\n", off.atom_entry_atom_offset);
     printf("Offset for Hashlink in AtomEntry:\t%ld\n", off.atom_entry_hashlink_offset);
-
+#endif
     /* TODO read from pdb-JSON */
     off.teb_win32threadinfo_offset = 0x40;
 
@@ -396,9 +396,9 @@ void print_as_hex(char* cp, size_t l)
 }
 
 /*
- * Read a Windows wchar-string into a wchar_t*, since vmi_read_unicode_str_va fails to parse
- * _RTL_ATOM_ENTRY's name-string. Expansion is performed since Windows' wchar is 2 bytes
- * versus 4 bytes on 64bit-Linux
+ * Read a Windows wchar-string into a wchar_t*, since vmi_read_unicode_str_va
+ * fails to parse _RTL_ATOM_ENTRY's name-string. Expansion is performed since
+ * Windows' wchar is 2 bytes versus 4 bytes on 64bit-Linux
  */
 wchar_t* read_wchar_str_pid(vmi_instance_t vmi, addr_t start, size_t len, vmi_pid_t pid)
 {
@@ -410,7 +410,6 @@ wchar_t* read_wchar_str_pid(vmi_instance_t vmi, addr_t start, size_t len, vmi_pi
         uint16_t c = 0;
         if (VMI_FAILURE == vmi_read_16_va(vmi, start + i * 2, pid, &c))
         {
-            printf("Error reading wchar at %" PRIx64 "\n", start + i * 2);
             free(s);
             return NULL;
         }
@@ -423,6 +422,7 @@ wchar_t* read_wchar_str(vmi_instance_t vmi, addr_t start, size_t len)
 {
     return read_wchar_str_pid(vmi, start, len, 0);
 }
+
 void draw_single_wnd_container(struct wnd_container* w)
 {
 
@@ -434,8 +434,6 @@ void draw_single_wnd_container(struct wnd_container* w)
     {
         int width = w->r.x1-w->r.x0;
         int height = w->r.y1-w->r.y0;
-
-
 
         gfx_color(80*w->level, 80*w->level, 80*w->level);
         gfx_fill_rect(w->r.x0, w->r.y0, width, height);
@@ -459,6 +457,7 @@ void draw_single_wnd_container(struct wnd_container* w)
     }
     gfx_flush();
 }
+
 status_t draw_single_window(vmi_instance_t vmi, addr_t win, vmi_pid_t pid)
 {
     status_t ret = VMI_FAILURE;
@@ -549,24 +548,21 @@ status_t draw_single_window(vmi_instance_t vmi, addr_t win, vmi_pid_t pid)
 
 status_t draw_windows(vmi_instance_t vmi, int width, int height, GArray* windows, vmi_pid_t pid)
 {
-
     /* Prepare drawing */
     gfx_open(1280, 720, "GUI Reconstruction");
     gfx_clear_color(255, 255, 255);
     gfx_clear();
     gfx_color(0, 0, 0);
 
-    addr_t wnd_addr = 0;
-    printf("Size of list: %d\n", windows->len);
+    struct wnd_container* wnd = 0;
+
     for (size_t i=0; i<windows->len; i++)
     {
-        wnd_addr = g_array_index(windows, addr_t, i);
-        printf("WND Addr %"PRIx64"\n", wnd_addr);
-        draw_single_window(vmi, wnd_addr, pid);
+        wnd = g_array_index(windows, struct wnd_container*, i);
+        draw_single_wnd_container(wnd);
     }
 
     char c = 'a';
-
     while (1)
     {
         c = gfx_wait();
@@ -577,71 +573,6 @@ status_t draw_windows(vmi_instance_t vmi, int width, int height, GArray* windows
     gfx_close();
 
     return VMI_SUCCESS;
-}
-status_t print_window(vmi_instance_t vmi, addr_t win, vmi_pid_t pid, GHashTable* atom_table)
-{
-    status_t ret = VMI_FAILURE;
-
-    uint32_t x0 = 0;
-    uint32_t x1 = 0;
-    uint32_t y0 = 0;
-    uint32_t y1 = 0;
-
-    uint32_t style = 0;
-    uint32_t exstyle = 0;
-
-    ret = vmi_read_32_va(vmi, win + off.rc_wnd_offset + off.rect_left_offset, pid, (uint32_t*)&x0);
-    ret = vmi_read_32_va(vmi, win + off.rc_wnd_offset + off.rect_right_offset, pid, (uint32_t*)&x1);
-    ret = vmi_read_32_va(vmi, win + off.rc_wnd_offset + off.rect_top_offset, pid, (uint32_t*)&y0);
-    ret = vmi_read_32_va(vmi, win + off.rc_wnd_offset + off.rect_bottom_offset, pid, (uint32_t*)&y1);
-
-    /* Retrieves atom value */
-    addr_t pcls = 0;
-    ret = vmi_read_addr_va(vmi, win + off.pcls_offset, pid, &pcls);
-    uint16_t atom = 0;
-    ret = vmi_read_16_va(vmi, pcls + off.cls_atom_offset, pid, &atom);
-    struct atom_entry* ae = g_hash_table_lookup(atom_table, GUINT_TO_POINTER(atom));
-
-    /* Determines, if windows is visible */
-    ret = vmi_read_32_va(vmi, win + off.wnd_style, pid, (uint32_t*)&style);
-
-    /* Determines extended style attributes */
-    ret = vmi_read_32_va(vmi, win + off.wnd_exstyle, pid, (uint32_t*)&exstyle);
-
-    if ((style & WS_VISIBLE) &&
-        !(style &WS_DISABLED) &&
-        !(style & WS_MINIMIZE) &&
-        !(exstyle & WS_EX_TRANSPARENT))
-    {
-        printf("\t\tSize: %d x %d\n", x1 - x0, y1 - y0);
-        printf("\t\t\tVisibilty: %"  PRIx32"\n", style);
-        printf("\t\t\tAtom: %"  PRIx16"\n", atom);
-
-        if (ae)
-            printf("\t\t\tClass Name: %ls\n", ae->name);
-
-
-        printf("\t\t\t_WINDOW.x0: %" PRIx32 "\n", x0);
-        printf("\t\t\t_WINDOW.x1: %" PRIx32 "\n", x1);
-        printf("\t\t\t_WINDOW.y0: %" PRIx32 "\n", y0);
-        printf("\t\t\t_WINDOW.y1: %" PRIx32 "\n", y1);
-
-        addr_t str_name_off = 0;
-
-        /* Retrieves window name */
-        if (VMI_FAILURE != vmi_read_addr_va(vmi, win + off.wnd_strname_offset + off.large_unicode_buf_offset, pid, &str_name_off))
-        {
-            /*
-             * Length is always 0, therefore always read 255 chars
-             * https://github.com/volatilityfoundation/volatility/blob/a438e768194a9e05eb4d9ee9338b881c0fa25937/volatility/plugins/gui/vtypes/win7_sp1_x86_vtypes_gui.py#L650
-             */
-            wchar_t* wn = read_wchar_str_pid(vmi, str_name_off, (size_t) 255, pid);
-
-            if (wn)
-                printf("\t\t\tWindow name wchar: %ls\n", wn);
-        }
-    }
-    return ret;
 }
 
 GHashTable* copy_hashtable(GHashTable* src)
@@ -678,7 +609,6 @@ bool is_wnd_visible(vmi_instance_t vmi, vmi_pid_t pid, addr_t wnd)
 
 struct wnd_container* construct_wnd_container(vmi_instance_t vmi, vmi_pid_t pid, addr_t win, int level)
 {
-    printf("Constructing wnd_container\n");
     status_t ret = VMI_FAILURE;
 
     uint32_t x0 = 0;
@@ -718,6 +648,7 @@ struct wnd_container* construct_wnd_container(vmi_instance_t vmi, vmi_pid_t pid,
 
     addr_t str_name_off;
     char* wn_ascii = NULL;
+
     /* Retrieves window name */
     if (VMI_FAILURE != vmi_read_addr_va(vmi, win + off.wnd_strname_offset + off.large_unicode_buf_offset, pid, &str_name_off))
     {
@@ -784,6 +715,7 @@ status_t traverse_windows_pid(vmi_instance_t vmi, addr_t* win,
 
         /* Keeps track of current window in order to detect cycles later */
         g_hash_table_add(seen_windows, (gpointer)cur);
+
         /* Stores current window for ordered traversal */
         g_array_append_val(wins, cur);
 
@@ -807,7 +739,9 @@ status_t traverse_windows_pid(vmi_instance_t vmi, addr_t* win,
     {
         addr_t* val = g_array_index(wins, addr_t*, len-(i+1));
 
+#ifdef DEBUG
         printf("\t\tWindow at %" PRIx64 "\n", *val);
+#endif
 
         if (!is_wnd_visible(vmi, pid, *val))
             continue;
@@ -838,7 +772,7 @@ status_t traverse_windows_pid(vmi_instance_t vmi, addr_t* win,
     return VMI_SUCCESS;
 }
 
-status_t retrieve_windows_from_desktop(vmi_instance_t vmi, addr_t desktop, vmi_pid_t pid, GArray* result_windows)
+GArray* retrieve_windows_from_desktop(vmi_instance_t vmi, addr_t desktop, vmi_pid_t pid)
 {
     uint32_t desk_id = 0;
 
@@ -848,9 +782,8 @@ status_t retrieve_windows_from_desktop(vmi_instance_t vmi, addr_t desktop, vmi_p
     if (VMI_FAILURE == vmi_read_32_va(vmi, addr, pid, &desk_id))
     {
         printf("\t\tFailed to read desktop ID at %" PRIx64 "\n", desktop + off.desk_desktopid_off);
-        return VMI_FAILURE;
+        return NULL;
     }
-    printf("\tRetrieveing Windows for desktop #%"PRIx32"\n", desk_id);
 
     addr_t desktop_info;
     addr = desktop + off.desk_pdeskinfo_off;
@@ -858,11 +791,11 @@ status_t retrieve_windows_from_desktop(vmi_instance_t vmi, addr_t desktop, vmi_p
     if (VMI_FAILURE == vmi_read_addr_va(vmi, addr, pid, &desktop_info))
     {
         printf("\t\tFailed to read pointer to _DESKTOPINFO at %" PRIx64 "\n", desktop + off.desk_pdeskinfo_off);
-        return VMI_FAILURE;
+        return NULL;
     }
-
-    printf("\t\t_DESKTOPINFO at: %" PRIx64 "\n", desktop_info);
-
+#ifdef DEBUG
+    printf("\t_DESKTOPINFO at: %" PRIx64 "\n", desktop_info);
+#endif
     addr_t spwnd = 0;
 
     addr = desktop_info + off.spwnd_offset;
@@ -870,30 +803,31 @@ status_t retrieve_windows_from_desktop(vmi_instance_t vmi, addr_t desktop, vmi_p
     /* Retrieves pointer to struct pointer window */
     if (VMI_FAILURE == vmi_read_addr_va(vmi, addr, pid, &spwnd))
     {
-        printf("\t\t\tFailed to read pointer to _WINDOW at %" PRIx64 "\n",  desktop_info + off.spwnd_offset);
-        return VMI_FAILURE;
+        printf("\t\tFailed to read pointer to _WINDOW at %" PRIx64 "\n",  desktop_info + off.spwnd_offset);
+        return NULL;
     }
 
     if (!spwnd)
     {
-        printf("\t\t\tNo valid windows for _DESKTOPINFO %" PRIx64 "\n", desktop_info);
-        return VMI_SUCCESS;
+        printf("\t\tNo valid windows for _DESKTOPINFO %" PRIx64 "\n", desktop_info);
+        return NULL;
     }
-
-    printf("\t\t\t_WINDOW at: %" PRIx64 "\n", spwnd);
+#ifdef DEBUG
+    printf("\t\t_WINDOW at: %" PRIx64 "\n", spwnd);
 
     /* Iterates over all windows */
     printf("\tStarting to traverse windows, starting at %" PRIx64 "\n", spwnd);
-
+#endif
     addr_t* root = malloc(sizeof(uint64_t));
     *root = spwnd;
 
+    GArray* result_windows = g_array_new(true, true, sizeof(struct wnd_container*));
     GHashTable* seen_windows = g_hash_table_new(g_int64_hash, g_int64_equal);
 
     traverse_windows_pid(vmi, root, pid, seen_windows, result_windows, 0);
     g_hash_table_destroy(seen_windows);
 
-    return VMI_SUCCESS;
+    return result_windows;
 }
 
 /* Traverses this singly-linked list of desktops belonging to one WinSta */
@@ -917,9 +851,9 @@ status_t traverse_desktops(vmi_instance_t vmi, addr_t* desktops,
             *max_len = i;
             return VMI_FAILURE;
         }
-
+#ifdef DEBUG
         printf("\tDesktop at %"PRIx64"\n", cur);
-
+#endif
         if (next == list_head)
             break;
         cur = next;
@@ -946,14 +880,12 @@ status_t populate_winsta(vmi_instance_t vmi, struct winsta_container* winsta, ad
         printf("Failed to read pointer to atom table at %" PRIx64 "\n", addr + off.p_global_atom_table_offset);
         return VMI_FAILURE;
     }
-    printf("\tAtom table at %"PRIx64"\n", winsta->atom_table);
 
     if (VMI_FAILURE == vmi_read_32_va(vmi, addr + off.winsta_session_id_offset, 0, &winsta->session_id))
     {
         printf("Failed to read session ID at %" PRIx64 "\n", addr + off.winsta_session_id_offset);
         return VMI_FAILURE;
     }
-    printf("\tSession ID %"PRId32"\n", winsta->session_id);
 
     uint32_t wsf_flags = 0;
 
@@ -986,7 +918,11 @@ status_t populate_winsta(vmi_instance_t vmi, struct winsta_container* winsta, ad
     }
     winsta->len_desktops = len;
 
+#ifdef DEBUG
+    printf("\tAtom table at %"PRIx64"\n", winsta->atom_table);
+    printf("\tSession ID %"PRId32"\n", winsta->session_id);
     printf("\tFound %ld desktops\n", winsta->len_desktops);
+#endif
 
     return VMI_SUCCESS;
 }
@@ -1005,8 +941,27 @@ status_t retrieve_winstas_from_procs(vmi_instance_t vmi, struct winsta_container
         printf("Failed to read next pointer at %" PRIx64 "\n", cur_list_entry);
         return VMI_FAILURE;
     }
-    addr_t current_process = 0;
+
+#ifdef DEBUG
     char* procname;
+    procname = vmi_read_str_va(vmi, current_process + off.name_offset, 0);
+
+    if (!procname)
+    {
+        printf("Failed to find procname\n");
+        return VMI_FAILURE;
+    }
+
+    if (procname)
+    {
+        free(procname);
+        procname = NULL;
+    }
+    /* Print out the process name */
+    printf("[%5d] %s (struct addr:%" PRIx64 ")\n", pid, procname, current_process);
+#endif
+
+    addr_t current_process = 0;
     vmi_pid_t pid;
     size_t winsta_count = 0;
 
@@ -1020,22 +975,6 @@ status_t retrieve_winstas_from_procs(vmi_instance_t vmi, struct winsta_container
          * so this is safe enough for x64 Windows for example purposes */
         vmi_read_32_va(vmi, current_process + off.pid_offset, 0, (uint32_t*)&pid);
 
-        procname = vmi_read_str_va(vmi, current_process + off.name_offset, 0);
-
-        if (!procname)
-        {
-            printf("Failed to find procname\n");
-            return VMI_FAILURE;
-        }
-
-        /* Print out the process name */
-        printf("[%5d] %s (struct addr:%" PRIx64 ")\n", pid, procname, current_process);
-        if (procname)
-        {
-            free(procname);
-            procname = NULL;
-        }
-
         addr_t thrd_list_head = 0;
 
         /* Retrieves pointer of ThreadListHead-member == associated thread */
@@ -1044,7 +983,10 @@ status_t retrieve_winstas_from_procs(vmi_instance_t vmi, struct winsta_container
             printf("Failed to read ThreadListHead-pointer at %" PRIx64 "\n", current_process + off.thread_list_head_offset);
             return VMI_FAILURE;
         }
+
+#ifdef DEBUG
         printf("\tThreadListHead at: %" PRIx64 "\n", thrd_list_head);
+#endif
 
         /* Calculates offset to the start of the _ETHREAD-struct */
         addr_t cur_thrd_list_entry = thrd_list_head;
@@ -1055,7 +997,6 @@ status_t retrieve_winstas_from_procs(vmi_instance_t vmi, struct winsta_container
         while (1)
         {
             cur_ethread = cur_thrd_list_entry - off.thread_list_entry_offset;
-            printf("\t\tThread at %" PRIx64 "\n", cur_ethread);
             /* _ETHREAD contains a  _KTHREAD structure (of size 0x200 for Win7) in the beginning */
             addr_t cur_kthread = cur_ethread;
             addr_t teb = 0;
@@ -1077,8 +1018,10 @@ status_t retrieve_winstas_from_procs(vmi_instance_t vmi, struct winsta_container
             // Retrieves pointer to Win32ThreadInfo-struct
             if (VMI_FAILURE == vmi_read_addr_va(vmi, teb + off.teb_win32threadinfo_offset, pid, &w32thrd_info)) // TODO read offset from json
             {
+#ifdef DEBUG
                 printf("\t\tTEB at %" PRIx64 "\n", teb);
                 printf("\t\tFailed to read pointer to w32thrd_info at %" PRIx64 "\n", teb + 64);
+#endif
                 goto next_thrd;
             }
             addr_t desktop_info = 0;
@@ -1089,19 +1032,20 @@ status_t retrieve_winstas_from_procs(vmi_instance_t vmi, struct winsta_container
                 goto next_thrd;
             }
 
-            printf("\t\tWin32Thread at: %" PRIx64 "\n", w32thrd_info);
-
-            // Retrieves pointer desktop info struct
+            /* Retrieves pointer desktop info struct */
             if (VMI_FAILURE == vmi_read_addr_va(vmi, w32thrd_info + off.w32t_deskinfo_offset, pid, &desktop_info))
             {
                 printf("\t\tFailed to read pointer to _DESKTOPINFO at %" PRIx64 "\n", w32thrd_info + off.w32t_deskinfo_offset);
                 goto next_thrd;
             }
-
+#ifdef DEBUG
+            printf("\t\tThread at %" PRIx64 "\n", cur_ethread);
+            printf("\t\tWin32Thread at: %" PRIx64 "\n", w32thrd_info);
             printf("\t\t\t_DESKTOPINFO at: %" PRIx64 "\n", desktop_info);
-
+#endif
             addr_t cur_pwinsta = 0;
-            // Retrieves pointer to winsta struct
+
+            /* Retrieves pointer to winsta struct */
             if (VMI_FAILURE == vmi_read_addr_va(vmi, w32thrd_info + off.w32t_pwinsta_offset, pid, &cur_pwinsta))
             {
                 printf("\t\tFailed to read pointer to tagWINDOWSTATION at %" PRIx64 "\n", w32thrd_info + off.w32t_pwinsta_offset);
@@ -1137,7 +1081,7 @@ next_thrd:
                 return VMI_FAILURE;
             }
 
-            /* All reads processed */
+            /* All threads processed, exit loop */
             if (next_thread_entry == thrd_list_head)
             {
                 break;
@@ -1154,10 +1098,10 @@ next_thrd:
         }
 
         /*
-         * In Windows, the next pointer points to the head of list, this pointer is actually the
-         * address of PsActiveProcessHead symbol, not the address of an ActiveProcessLink in
-         * EPROCESS struct.
-         * It means in Windows, we should stop the loop at the last element in the list
+         * In Windows, the next pointer points to the head of list, this pointer
+         * is actually the address of PsActiveProcessHead symbol, not the
+         * address of an ActiveProcessLink in EPROCESS struct. It means in
+         * Windows, we should stop the loop at the last element in the list
          */
         if (next_list_entry == off.ps_active_process_head)
         {
@@ -1214,11 +1158,8 @@ struct atom_entry* parse_atom_entry(vmi_instance_t vmi, addr_t atom_addr)
         printf("Error reading NameLength at %" PRIx64 "\n", atom_addr + off.atom_entry_name_len_offset);
         return NULL;
     }
-    //printf("Name length %d\n", entry->name_len);
-    entry->name = read_wchar_str(vmi, atom_addr + off.atom_entry_name_offset, (size_t) entry->name_len);
 
-    //entry->name = vmi_read_unicode_str_va(vmi, atom_addr + off.atom_entry_name_offset, 0);
-    //entry->name = vmi_read_str_va(vmi, ae + off.atom_entry_name_offset, 0);
+    entry->name = read_wchar_str(vmi, atom_addr + off.atom_entry_name_offset, (size_t) entry->name_len);
 
     if (!entry->name)
     {
@@ -1244,7 +1185,6 @@ GHashTable* build_atom_table(vmi_instance_t vmi, addr_t table_addr)
         printf("Failed to read num buckets-value of _RTL_ATOM_TABLE at %" PRIx64 "\n", table_addr + off.atom_table_num_buckets_off);
         return NULL;
     }
-    //printf("Num buckets in _RTL_ATOM_TABLE: %"PRId32"\n", num_buckets);
 
     GHashTable* ht = g_hash_table_new(g_direct_hash, g_direct_equal);
     add_default_atoms(ht);
@@ -1272,7 +1212,6 @@ GHashTable* build_atom_table(vmi_instance_t vmi, addr_t table_addr)
         if (a)
         {
             g_hash_table_insert(ht,  GUINT_TO_POINTER(a->atom), (gpointer) a);
-            //printf("Atom at: %" PRIx64 " - Value: %" PRIx16 " - %" PRId32 "\n", cur, a->atom, a->ref_count);
         }
         /* Traverses the linked list of each top level _RTL_ATOM_TABLE_ENTRY */
         while (a && a->hashlink)
@@ -1283,7 +1222,6 @@ GHashTable* build_atom_table(vmi_instance_t vmi, addr_t table_addr)
             if (a)
             {
                 g_hash_table_insert(ht,  GUINT_TO_POINTER(a->atom), (gpointer)a);
-                //printf("Atom at: %" PRIx64 " - Value: %" PRIx16 " - %" PRId32 "\n", cur, a->atom, a->ref_count);
             }
         }
     }
@@ -1300,13 +1238,105 @@ void clean_up(vmi_instance_t vmi )
     vmi_destroy(vmi);
 }
 
-int main (int argc, char** argv)
+status_t vmi_reconstruct_gui(uint64_t domid, const char* config_path, uint8_t config_type)
 {
     vmi_instance_t vmi = {0};
+
+    void* input = (void*) &domid;
+    void* config = (void*) config_path;
+
+    /* Initializes the libvmi library */
+    if (VMI_FAILURE == vmi_init_complete(&vmi, input, VMI_INIT_DOMAINID, NULL, config_type, config, NULL))
+    {
+        printf("Failed to init LibVMI library.\n");
+        clean_up(vmi);
+        return VMI_FAILURE;
+    }
+
+    /* Checks, that VM is house a Windows OS */
+    os_t os = vmi_get_ostype(vmi);
+
+    if (VMI_OS_WINDOWS != os)
+    {
+        fprintf(stderr, "Only Windows is supported!");
+        clean_up(vmi);
+        return VMI_FAILURE;
+    }
+
+    /* Pauses the vm for consistent memory access */
+    if (vmi_pause_vm(vmi) != VMI_SUCCESS)
+    {
+        printf("Failed to pause VM\n");
+        clean_up(vmi);
+        return VMI_FAILURE;
+    }
+
+    /* Retrieves name of the VM */
+    char* vm_name = vmi_get_name(vmi);
+    printf("Reconstruction of GUI of VM %s\n", vm_name);
+    free(vm_name);
+
+    /* Retrieves offsets to relevent fields */
+    if (VMI_FAILURE == find_offsets(vmi))
+    {
+        clean_up(vmi);
+        return VMI_FAILURE;
+    }
+
+    size_t len = 0;
+    struct winsta_container* winstas = NULL;
+
+    /* Gathers windows stations with all desktops by iterating over all procs */
+    if (VMI_FAILURE == retrieve_winstas_from_procs(vmi, &winstas, &len))
+    {
+        clean_up(vmi);
+        return VMI_FAILURE;
+    }
+
+    printf("\nAddr     \tInteractive?\tSession\n");
+    printf("-------------------------------------\n");
+    for (size_t i = 0; i < len; i++)
+    {
+        printf("%" PRIx64 "\t", winstas[i].addr);
+        if (winstas[i].is_interactive)
+            printf("Interactive\t");
+        else
+            printf("Not interactive\t");
+
+        printf("# %" PRId32 "\n", winstas[i].session_id);
+    }
+    printf("-------------------------------------\n\n");
+
+    for (size_t i = 0; i < len; i++)
+    {
+        printf("[*] WinSta # %" PRId32 " at %" PRIx64 "\n", winstas[i].session_id, winstas[i].addr);
+
+#ifdef DEBUG
+        GHashTable* atom_table = build_atom_table(vmi, winstas[i].atom_table);
+        print_atom_table(atom_table);
+        g_hash_table_destroy(atom_table);
+#endif
+        for (size_t j = 0; j < winstas[i].len_desktops; j++)
+        {
+
+            printf("Retrieving windows for desktop %" PRIx64 "\n", winstas[i].desktops[j]);
+            GArray* windows = retrieve_windows_from_desktop(vmi, winstas[i].desktops[j], winstas[i].providing_pid);
+            draw_windows(vmi, 1024, 768, windows, winstas[i].providing_pid);
+            g_array_free(windows, true);
+        }
+        printf("-------------------------------------\n\n");
+    }
+
+    // https://resources.infosecinstitute.com/topic/windows-gui-forensics-session-objects-window-stations-and-desktop/
+    clean_up(vmi);
+    return VMI_SUCCESS;
+}
+
+int main (int argc, char** argv)
+{
     uint64_t domid = 0;
-    uint8_t init = VMI_INIT_DOMAINID;
     uint8_t config_type = VMI_CONFIG_GLOBAL_FILE_ENTRY;
-    void* input = NULL, *config = NULL;
+    const char* config = NULL;
 
     if ( argc < 2 )
     {
@@ -1315,9 +1345,6 @@ int main (int argc, char** argv)
         printf("\t -j/--json <path to kernel's json profile>\n");
         exit(EXIT_FAILURE);
     }
-
-    if (argc == 2 )
-        input = argv[1];
 
     if ( argc > 2 )
     {
@@ -1336,11 +1363,10 @@ int main (int argc, char** argv)
             {
                 case 'd':
                     domid = strtoull(optarg, NULL, 0);
-                    input = (void*)&domid;
                     break;
                 case 'j':
                     config_type = VMI_CONFIG_JSON_PATH;
-                    config = (void*)optarg;
+                    config = optarg;
                     break;
                 default:
                     printf("Unknown option\n");
@@ -1348,137 +1374,10 @@ int main (int argc, char** argv)
             }
     }
 
-    /* Initializes the libvmi library */
-    if (VMI_FAILURE == vmi_init_complete(&vmi, input, init, NULL, config_type, config, NULL))
-    {
-        printf("Failed to init LibVMI library.\n");
-        clean_up(vmi);
+    status_t ret = vmi_reconstruct_gui(domid, config, config_type);
+
+    if (ret == VMI_SUCCESS)
+        exit(EXIT_SUCCESS);
+    else
         exit(EXIT_FAILURE);
-    }
-
-    /* Checks, that VM is house a Windows OS */
-    os_t os = vmi_get_ostype(vmi);
-    if (VMI_OS_WINDOWS != os)
-    {
-        fprintf(stderr, "Only Windows is supported!");
-        clean_up(vmi);
-        exit(EXIT_FAILURE);
-    }
-
-    /* Pauses the vm for consistent memory access */
-    if (vmi_pause_vm(vmi) != VMI_SUCCESS)
-    {
-        printf("Failed to pause VM\n");
-        clean_up(vmi);
-        exit(EXIT_FAILURE);
-    }
-
-    /* Retrieves name of the VM */
-    char* vm_name = vmi_get_name(vmi);
-    printf("Reconstruction if windows for VM %s\n", vm_name);
-    free(vm_name);
-
-    /* Retrieves offsets to relevent fields */
-    if (VMI_FAILURE == find_offsets(vmi))
-    {
-        clean_up(vmi);
-        exit(EXIT_FAILURE);
-    }
-
-    size_t len = 0;
-    struct winsta_container* winstas = NULL;
-
-    /* Gathers windows stations with all desktops by iterating over all processes */
-    if (VMI_FAILURE == retrieve_winstas_from_procs(vmi, &winstas, &len))
-        clean_up(vmi);
-
-    printf("\n\nAddr     \tInteractive?\tSession\n");
-    printf("-------------------------------------\n");
-
-    for (size_t i = 0; i < len; i++)
-    {
-        printf("%" PRIx64 "\t", winstas[i].addr);
-        if (winstas[i].is_interactive)
-            printf("Interactive\t");
-        else
-            printf("Not interactive\t");
-
-        printf("# %" PRId32 "\n", winstas[i].session_id);
-
-        GHashTable* atom_table = build_atom_table(vmi, winstas[i].atom_table);
-        print_atom_table(atom_table);
-
-        for (size_t j = 0; j < winstas[i].len_desktops; j++)
-        {
-            GArray* windows = g_array_new(true, true, sizeof(struct wnd_container*));
-            printf("Retrieving windows for desktop %" PRIx64 "\n", winstas[i].desktops[j]);
-
-            retrieve_windows_from_desktop(vmi, winstas[i].desktops[j], winstas[i].providing_pid, windows);
-
-            /* Prepare drawing */
-            gfx_open(800, 600, "GUI Reconstruction");
-            gfx_clear_color(255, 255, 255);
-            gfx_clear();
-            gfx_color(0, 0, 0);
-
-            struct wnd_container* w = NULL;
-
-            for (size_t j = 0; j < windows->len; j++)
-            {
-                w = g_array_index(windows, struct wnd_container*, j);
-                if (w)
-                {
-                    draw_single_wnd_container(w);
-                    printf("%s - %d\n", w->text, w->level);
-                    if (w->exstyle & WS_EX_TOPMOST)
-                        printf("Topmost!\n");
-
-                }
-            }
-
-            /*
-            for(int l = 0; l<5; l++){
-
-                for (size_t j = 0; j < windows->len; j++)
-                {
-                    w = g_array_index(windows, struct wnd_container *, j);
-                    if (w && w->level==l){
-                        draw_single_wnd_container(w);
-                        printf("%s - %d\n", w->text, w->level);
-                    }
-                }
-            }
-            */
-            /*
-            for (size_t j = 0; j < windows->len; j++)
-                {
-                    w = g_array_index(windows, struct wnd_container *, j);
-
-                    if(w->exstyle & WS_EX_TOPMOST)
-                        printf("Topmost!\n");
-                    draw_single_wnd_container(w);
-                    printf("%s - %d\n", w->text, w->level);
-
-                }
-                */
-            char c = 'a';
-
-            while (1)
-            {
-                c = gfx_wait();
-                if (c == 'q')
-                    break;
-            }
-
-            gfx_close();
-
-            //draw_windows(vmi, 1024, 768, windows, winstas[i].providing_pid);
-            g_array_free(windows, true);
-        }
-        g_hash_table_destroy(atom_table);
-    }
-
-    // https://resources.infosecinstitute.com/topic/windows-gui-forensics-session-objects-window-stations-and-desktop/
-    clean_up(vmi);
-    exit(EXIT_SUCCESS);
 }

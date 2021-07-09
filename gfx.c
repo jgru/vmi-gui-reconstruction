@@ -135,8 +135,13 @@ void gfx_wstr( int x, int y, wchar_t* string, int num_wchars )
     XwcDrawString(gfx_display, gfx_window, gfx_font_set, gfx_gc, x, y + font_v_offset, string, num_wchars);
 }
 
-/* Draw a wchar-string */
-void gfx_draw_str_multiline( int x, int y, char* string, int n, int max_width)
+/* Draw a single line string */
+void gfx_draw_str( int x, int y, const char* string, int n)
+{
+    XmbDrawString(gfx_display, gfx_window, gfx_font_set, gfx_gc, x, y + font_v_offset, string, n);
+}
+/* Draw a multiline string */
+void gfx_draw_str_multiline( int x, int y, const char* string, int n, int max_width)
 {
     int string_width = XTextWidth(gfx_font_struct, string, n);
 

@@ -35,7 +35,10 @@ void gfx_line( int x1, int y1, int x2, int y2 );
 void gfx_wstr(int x1, int y1, wchar_t* string, int num_wchars);
 
 /* Draw a multiline string breaking at max_width */
-void gfx_draw_str_multiline( int x, int y, char* string, int num_wchars, int max_width);
+void gfx_draw_str( int x, int y, const char* string, int num_chars);
+
+/* Draw a multiline string breaking at max_width */
+void gfx_draw_str_multiline( int x, int y, const char* string, int num_chars, int max_width);
 
 /* Change the current drawing color. */
 void gfx_color( int red, int green, int blue );
