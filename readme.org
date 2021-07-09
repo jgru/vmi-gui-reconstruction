@@ -1,6 +1,9 @@
 * vmi-reconstruct-gui
 A proof-of-concept to reconstruction the GUI of Xen VM running Windows 7.
 
+** :exclamation: Disclaimer
+This repository is work in progress. It currently only works with 32-bit Windows 7 SP1 systems. 
+
 ** Description
 ~vmi-reconstruct-gui~ is a reimplementation of Brendan Dolan-Gavitt's [[https://volatility-labs.blogspot.com/2012/10/movp-43-taking-screenshots-from-memory.html][Volatility screenshot-plugin]] using [[https://github.com/libvmi/libvmi][libvmi]] to reconstruct the GUI of a Windows 7-box running as a Xen-guest. It was developed as a draft and blueprint to incorporate GUI forensics into the black-box binary analysis system [[https://github.com/tklengyel/drakvuf][DRAKVUF]] in the future. 
 
