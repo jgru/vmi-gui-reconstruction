@@ -1,17 +1,34 @@
 * vmi-reconstruct-gui
-`vmi-reconstruct-gui` is a reimplementation of Brendan Dolan-Gavitt's [[https://volatility-labs.blogspot.com/2012/10/movp-43-taking-screenshots-from-memory.html][Volatility screenshot-plugin]] using [[https://github.com/libvmi/libvmi][libvmi]] to reconstruct the GUI of a Windows 7-box running as a Xen-guest. 
+~vmi-reconstruct-gui~ is a reimplementation of Brendan Dolan-Gavitt's [[https://volatility-labs.blogspot.com/2012/10/movp-43-taking-screenshots-from-memory.html][Volatility screenshot-plugin]] using [[https://github.com/libvmi/libvmi][libvmi]] to reconstruct the GUI of a Windows 7-box running as a Xen-guest. It was developed as a draft and blueprint to incorporate GUI forensics into the black-box binary analysis system [[https://github.com/tklengyel/drakvuf][DRAKVUF]] in the future. 
+
+This tools reconstructs each desktop, that could be found in the memory of a running guest, and shows it one after another as a wireframe. To advance the presented desktop, press any key. Note that, Windows houses a lot of empty desktops, so many of those wireframes will be blank, if there are no visible desktops. 
+[[file:res/screenshot.png]]
+** Dependencies 
+~vmi-reconstruct-gui~ depends on the following libraries:
+- libvmi
+- libx11-dev
+- glib 
+
+Please make sure to install those and then run ~make~ from within this directory.
 
 ** Usage
-To use it determine the domaim identifier of the Win 7 VM in question 
+To use this PoC determine the Xen domain identifier of the Win 7 VM in question and run the compiled binary as illustrated below: 
+
 #+BEGIN_SRC shell
-sudo ./vmi-reconstruct-gui -d 1 -j /usr/local/share/vmi/windows7-sp1.json
+# Set name of the VM specified in its config file
+VM_NAME="your-vm-name"
+
+# Retrieve dom id 
+DOM_ID=$(sudo xl list | grep $VM_NAME | awk '{print $2}')
+
+# Set path to separately created intermediate symbol file 
+$IST_FILE="/usr/local/share/vmi/windows7-sp1.json"
+
+# Reconstruct the gui
+sudo ./vmi-reconstruct-gui -d $DOM_ID -j $IST_FILE
 #+END_SRC
 
-** Background 
-
-In the windows system, all active processes are connected together to form a doubly linked list. The table header is the global variable PsActiveProcessHead. When a process is created, its ActiveProcessList field will be added as a node to this list; When it is deleted, it is removed from the linked list. If Windows needs to enumerate all processes, you can directly manipulate the linked list [fn:1].
-
- PsActiveProcessHead is the head of the active process chain. In theory, it is the Blink of the EPROCESS structure member ActiveProcessLinks of the second process, and the Flink of the EProcess structure member ActiveProcessLinks of the last process. The second process is the System process with a process ID equal to 4 [fn:1].
+** Background on the working of the tool
 
 *** Procedure to receive windows
 The following procedure is applied to reconstruct the GUI windows:
@@ -50,26 +67,6 @@ The following procedure is applied to reconstruct the GUI windows:
 After the depth-ordered list of the addresses to all visible tagWND-structs of a desktop is available, this list can be traverse and each tagWND-struct can be parsed. 
 Most important aspects of a tagWND-struct are:
 
-*** Search JSON-files generated from PDB
-# Find offset to teb
-cat /usr/local/share/vmi/windows7-sp1.json | jq '."user_types"."_KTHREAD".fields.Teb' 
-# tagDESKTOPINFO struct
-# Find thread info from _TEB, Win32ThreadInfo at offset 64
-cat /usr/local/share/vmi/win32k.json| jq '."$STRUCTS"._TEB[1].Win32ThreadInfo'
-# tagTHREADINFO contains a pointer to a tagDESKTOPINFO-struct at offset 204 (0xCC)
-cat /usr/local/share/vmi/win32k.json| jq '."$STRUCTS".tagTHREADINFO[1].pDeskInfo'
-# The tagDESKTOPINFO struct
-cat /usr/local/share/vmi/win32k.json| jq '."$STRUCTS".tagDESKTOPINFO[1]'
-# tagDESKTOPINFO contains pointer to actual window reference -- undocumented
-cat /usr/local/share/vmi/win32k.json| jq '."$STRUCTS".tagDESKTOPINFO[1].spwnd' # see https://systemroot.gitee.io/pages/apiexplorer/d2/d9/inc_2user_8h-source.html
-# tagWND struct contains rcWindow at offset 64, which is of type tagRECT
-cat /usr/local/share/vmi/win32k.json| jq '."$STRUCTS".tagWND[1].rcWindow' 
-# 
-cat /usr/local/share/vmi/win32k.json| jq '."$STRUCTS".tagRECT'
-
-* Footnotes
-
-[fn:1] https://titanwolf.org/Network/Articles/Article?AID=0de2af5a-cff3-49f8-b7d6-c2f9369ff313#gsc.tab=0
 
 ** References 
 - https://libvmi.com/api/
