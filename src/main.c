@@ -227,11 +227,20 @@ int sort_wnd_container(gconstpointer a, gconstpointer b)
     res = ((struct wnd_container*)b)->level - ((struct wnd_container*)a)->level;
     return res;
 }
-status_t find_offsets_from_ntoskrnl_json(vmi_instance_t vmi)
+status_t find_offsets_from_ntoskrnl_json(vmi_instance_t vmi, const char* kernel_json)
 {
-    /* Parse IST-file containing debugging information to retrieve offsets */
-    json_object* profile = vmi_get_kernel_json(vmi);
-
+    /* 
+     * Parse IST-file containing debugging information to retrieve offsets 
+     * Might have just used `vmi_get_kernel_json(vmi);`, but using
+     * the supplied IST-file is more explicit
+     */
+    json_object* profile =  json_object_from_file(kernel_json); 
+        
+    if(!profile)
+    {
+        fprintf(stderr, "Error win32k-JSON at %s\n", kernel_json);
+        return VMI_FAILURE;
+    }
     /* Find offsets within _EPROCESS */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
             vmi, profile, "_EPROCESS", "ActiveProcessLinks",
@@ -373,10 +382,15 @@ status_t find_offsets_from_ntoskrnl_json(vmi_instance_t vmi)
     return VMI_SUCCESS;
 }
 
-status_t find_offsets_from_win32k_json(vmi_instance_t vmi)
+status_t find_offsets_from_win32k_json(vmi_instance_t vmi, const char* win32k_json)
 {
-    json_object *w32k_json = json_object_from_file(
-        "/usr/local/src/vmi-gui-reconstruct/windows7-sp1-win32k.json");
+    json_object *w32k_json = json_object_from_file(win32k_json);
+    
+    if(!w32k_json)
+    {
+        fprintf(stderr, "Error win32k-JSON at %s\n", win32k_json);
+        return VMI_FAILURE;
+    }
 
     /* Reads offset to Win32ThreadInfo-struct from beginning of _TEB */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
@@ -644,7 +658,7 @@ status_t find_offsets_from_win32k_json(vmi_instance_t vmi)
     
     return VMI_SUCCESS;
 }
-status_t find_offsets(vmi_instance_t vmi) // const char *win32k_config,
+status_t find_offsets(vmi_instance_t vmi, const char* kernel_json, const char* win32k_json)
 {
 
     if (VMI_FAILURE == vmi_read_addr_ksym(vmi, "PsActiveProcessHead",
@@ -654,10 +668,10 @@ status_t find_offsets(vmi_instance_t vmi) // const char *win32k_config,
         return VMI_FAILURE;
     }
 
-    if(VMI_FAILURE == find_offsets_from_ntoskrnl_json(vmi))
+    if(VMI_FAILURE == find_offsets_from_ntoskrnl_json(vmi, kernel_json))
         return VMI_FAILURE;
 
-    if(VMI_FAILURE == find_offsets_from_win32k_json(vmi))
+    if(VMI_FAILURE == find_offsets_from_win32k_json(vmi, win32k_json))
         return VMI_FAILURE;
 
     return VMI_SUCCESS;
@@ -680,7 +694,7 @@ void print_as_hex(char* cp, size_t l)
 wchar_t* read_wchar_str_pid(vmi_instance_t vmi, addr_t start, size_t len, vmi_pid_t pid)
 {
     wchar_t* s = malloc(sizeof(wchar_t) * len);
-    memset(s, 0, len);
+    memset(s, 0, sizeof(wchar_t) * len);
 
     for (size_t i = 0; i < len; i++)
     {
@@ -690,7 +704,11 @@ wchar_t* read_wchar_str_pid(vmi_instance_t vmi, addr_t start, size_t len, vmi_pi
             free(s);
             return NULL;
         }
+            
         s[i] = (wchar_t)c;
+
+        if(s[i] == L'\0')
+            break;
     }
     return s;
 }
@@ -1511,15 +1529,17 @@ void clean_up(vmi_instance_t vmi)
     vmi_destroy(vmi);
 }
 
-status_t vmi_reconstruct_gui(uint64_t domid, const char* config_path, uint8_t config_type)
+status_t vmi_reconstruct_gui(uint64_t domid, const char* kernel_json, const char* win32k_json)
 {
     vmi_instance_t vmi = {0};
-
+    
     void* input = (void*)&domid;
-    void* config = (void*)config_path;
+    void* config = (void*)kernel_json;  
 
     /* Initializes the libvmi library */
-    if (VMI_FAILURE == vmi_init_complete(&vmi, input, VMI_INIT_DOMAINID, NULL, config_type, config, NULL))
+    if (VMI_FAILURE == vmi_init_complete(
+                           &vmi, input, VMI_INIT_DOMAINID, NULL,
+                           VMI_CONFIG_JSON_PATH, config, NULL))
     {
         printf("Failed to init LibVMI library.\n");
         clean_up(vmi);
@@ -1550,12 +1570,11 @@ status_t vmi_reconstruct_gui(uint64_t domid, const char* config_path, uint8_t co
     free(vm_name);
 
     /* Retrieves offsets to relevent fields */
-    if (VMI_FAILURE == find_offsets(vmi))
+    if (VMI_FAILURE == find_offsets(vmi, kernel_json, win32k_json))
     {
         clean_up(vmi);
         return VMI_FAILURE;
     }
-
 
     size_t len = 0;
     struct winsta_container* winstas = NULL;
@@ -1609,8 +1628,8 @@ status_t vmi_reconstruct_gui(uint64_t domid, const char* config_path, uint8_t co
 int main(int argc, char** argv)
 {
     uint64_t domid = 0;
-    uint8_t config_type = VMI_CONFIG_GLOBAL_FILE_ENTRY;
-    const char* config = NULL;
+    const char* kernel_json = NULL;
+    const char* win32k_json = NULL;
 
     if (argc < 2)
     {
@@ -1625,10 +1644,11 @@ int main(int argc, char** argv)
         const struct option long_opts[] =
         {
             {"domid", required_argument, NULL, 'd'},
-            {"json", required_argument, NULL, 'j'},
+            {"kernel", required_argument, NULL, 'k'},
+            {"win32k", required_argument, NULL, 'w'},
             {NULL, 0, NULL, 0}
         };
-        const char* opts = "n:d:j:s:";
+        const char* opts = "n:d:k:w:";
         int c;
         int long_index = 0;
 
@@ -1638,9 +1658,11 @@ int main(int argc, char** argv)
                 case 'd':
                     domid = strtoull(optarg, NULL, 0);
                     break;
-                case 'j':
-                    config_type = VMI_CONFIG_JSON_PATH;
-                    config = optarg;
+                case 'k':
+                    kernel_json = optarg;
+                    break;
+                case 'w':
+                    win32k_json = optarg;
                     break;
                 default:
                     printf("Unknown option\n");
@@ -1648,7 +1670,14 @@ int main(int argc, char** argv)
             }
     }
 
-    status_t ret = vmi_reconstruct_gui(domid, config, config_type);
+#ifdef DEBUG
+    printf("CLI-Parameters\n");
+    printf("\tDom ID: %ld\n", domid);
+    printf("\tKernel-JSON: %s\n",kernel_json);
+    printf("\tWin32k-JSON: %s\n",win32k_json);
+#endif 
+
+    status_t ret = vmi_reconstruct_gui(domid, kernel_json, win32k_json);
 
     if (ret == VMI_SUCCESS)
         exit(EXIT_SUCCESS);
