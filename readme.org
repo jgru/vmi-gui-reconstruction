@@ -28,13 +28,19 @@ VM_NAME="your-vm-name"
 # Retrieve dom id
 DOM_ID=$(sudo xl list | grep $VM_NAME | awk '{print $2}')
 
-# Set path to separately created intermediate symbol file
-IST_FILE="/usr/local/share/vmi/windows7-sp1.json"
+# Set path to separately created intermediate symbol file for ntoskrn
+KRN_IST_FILE="/usr/local/share/vmi/windows7-sp1.json"
 
-# Reconstruct the gui
-sudo ./vmi-reconstruct-gui -d $DOM_ID -j $IST_FILE
+# Set path to separately created intermediate symbol file for ntoskrn
+W32K_IST_FILE="/usr/local/share/vmi/windows7-sp1-win32k.json"
+
+# Reconstruct the gui, using short opts
+sudo ./vmi-reconstruct-gui -d $DOM_ID -k $KRN_IST_FILE -w $W32K_IST_FILE
 #+END_SRC
-
+Being more explicit, one could use the long opts
+#+BEGIN_SRC shell
+sudo ./vmi-reconstruct-gui --domid $DOM_ID --kernel $KRN_IST_FILE --win32k $W32K_IST_FILE
+#+END_SRC
 ** Background on the working of the tool
 The Windows GUI subsystem is structured by the concepts of sessions, window stations, desktops and windows. A session is the logon-environment of a user. Each session has multiple window stations -- interactive ones for handling user input and non-interactive ones for services. Each window station has a so-called atom table, which is basically a hashtable of strings and a notable attribute in the context of GUI forensics. The atom entries are shared by processes and -- among other things -- used to track classes of GUI objects.
 Most important is, that each window station contains a list of associated desktops. Those house all GUI objects, such as windows, buttons, menus and the like, as the name implies [1].
