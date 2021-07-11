@@ -3,7 +3,7 @@ CC=gcc
 
 INCLUDES=-I/usr/local/include/libvmi -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -I/usr/include/cairo -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -I/usr/include/pixman-1 -I/usr/include/uuid -I/usr/include/freetype2 -I/usr/include/libpng16
 
-LIBS=-L/usr/lib -lvmi -lglib-2.0 -lX11 -lm -lcairo
+LIBS=-L/usr/lib -lvmi -lglib-2.0 -lX11 -lm -lcairo -ljson-c
 
 #CFLAGS+= -Wextra -Werror
 CFLAGS+= -Wno-missing-field-initializers
