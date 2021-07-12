@@ -229,14 +229,14 @@ int sort_wnd_container(gconstpointer a, gconstpointer b)
 }
 status_t find_offsets_from_ntoskrnl_json(vmi_instance_t vmi, const char* kernel_json)
 {
-    /* 
-     * Parse IST-file containing debugging information to retrieve offsets 
+    /*
+     * Parse IST-file containing debugging information to retrieve offsets
      * Might have just used `vmi_get_kernel_json(vmi);`, but using
      * the supplied IST-file is more explicit
      */
-    json_object* profile =  json_object_from_file(kernel_json); 
-        
-    if(!profile)
+    json_object* profile =  json_object_from_file(kernel_json);
+
+    if (!profile)
     {
         fprintf(stderr, "Error win32k-JSON at %s\n", kernel_json);
         return VMI_FAILURE;
@@ -384,9 +384,9 @@ status_t find_offsets_from_ntoskrnl_json(vmi_instance_t vmi, const char* kernel_
 
 status_t find_offsets_from_win32k_json(vmi_instance_t vmi, const char* win32k_json)
 {
-    json_object *w32k_json = json_object_from_file(win32k_json);
-    
-    if(!w32k_json)
+    json_object* w32k_json = json_object_from_file(win32k_json);
+
+    if (!w32k_json)
     {
         fprintf(stderr, "Error win32k-JSON at %s\n", win32k_json);
         return VMI_FAILURE;
@@ -394,20 +394,20 @@ status_t find_offsets_from_win32k_json(vmi_instance_t vmi, const char* win32k_js
 
     /* Reads offset to Win32ThreadInfo-struct from beginning of _TEB */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
-                           vmi, w32k_json, "_TEB", "Win32ThreadInfo",
-                           &off.teb_win32threadinfo_offset))
+            vmi, w32k_json, "_TEB", "Win32ThreadInfo",
+            &off.teb_win32threadinfo_offset))
     {
         fprintf(stderr, "Error reading offset to Win32ThreadInfo from _TEB\n");
         return VMI_FAILURE;
     }
 
-    /* 
-     * Reads offset to pDeskInfo from beginning of tagTHREADINFO, which is a 
+    /*
+     * Reads offset to pDeskInfo from beginning of tagTHREADINFO, which is a
      * Win32ThreadInfo-struct retrieved in the previous call
      */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
-                           vmi, w32k_json, "tagTHREADINFO", "pDeskInfo",
-                           &off.w32t_deskinfo_offset))
+            vmi, w32k_json, "tagTHREADINFO", "pDeskInfo",
+            &off.w32t_deskinfo_offset))
     {
         fprintf(stderr, "Error reading offset to pDeskInfo from tagTHREADINFO\n");
         return VMI_FAILURE;
@@ -415,26 +415,26 @@ status_t find_offsets_from_win32k_json(vmi_instance_t vmi, const char* win32k_js
 
     /* Reads offset to pwinsta from beginning of tagTHREADINFO */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
-                           vmi, w32k_json, "tagTHREADINFO", "pwinsta",
-                           &off.w32t_pwinsta_offset ))
+            vmi, w32k_json, "tagTHREADINFO", "pwinsta",
+            &off.w32t_pwinsta_offset ))
     {
         fprintf(stderr, "Error reading offset to pDeskInfo from tagTHREADINFO\n");
         return VMI_FAILURE;
     }
-   
+
     /* Reads offset to dwSessionId from beginning of tagWINDOWSTATION */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
-                           vmi, w32k_json, "tagWINDOWSTATION", "dwSessionId",
-                           &off.winsta_session_id_offset))
+            vmi, w32k_json, "tagWINDOWSTATION", "dwSessionId",
+            &off.winsta_session_id_offset))
     {
         fprintf(stderr, "Error reading offset to session ID from tagWINDOWSTATION\n");
         return VMI_FAILURE;
     }
-    
+
     /* Reads offset to pGlobalAtomTable from beginning of tagWINDOWSTATION */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
-                           vmi, w32k_json, "tagWINDOWSTATION", "pGlobalAtomTable",
-                           &off.winsta_pglobal_atom_table_offset))
+            vmi, w32k_json, "tagWINDOWSTATION", "pGlobalAtomTable",
+            &off.winsta_pglobal_atom_table_offset))
     {
         fprintf(stderr, "Error reading offset to pGlobalAtomTable from tagWINDOWSTATION\n");
         return VMI_FAILURE;
@@ -442,8 +442,8 @@ status_t find_offsets_from_win32k_json(vmi_instance_t vmi, const char* win32k_js
 
     /* Reads offset to rpdeskList from beginning of tagWINDOWSTATION */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
-                           vmi, w32k_json, "tagWINDOWSTATION", "rpdeskList",
-                           &off.winsta_rpdesk_list_offset))
+            vmi, w32k_json, "tagWINDOWSTATION", "rpdeskList",
+            &off.winsta_rpdesk_list_offset))
     {
         fprintf(stderr, "Error reading offset to rpdeskList from tagWINDOWSTATION\n");
         return VMI_FAILURE;
@@ -451,8 +451,8 @@ status_t find_offsets_from_win32k_json(vmi_instance_t vmi, const char* win32k_js
 
     /* Reads offset to dwWSF_Flags from beginning of tagWINDOWSTATION */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
-                           vmi, w32k_json, "tagWINDOWSTATION", "dwWSF_Flags",
-                           &off.winsta_wsf_flags))
+            vmi, w32k_json, "tagWINDOWSTATION", "dwWSF_Flags",
+            &off.winsta_wsf_flags))
     {
         fprintf(stderr, "Error reading offset to dwWSF_Flags from tagWINDOWSTATION\n");
         return VMI_FAILURE;
@@ -466,8 +466,8 @@ status_t find_offsets_from_win32k_json(vmi_instance_t vmi, const char* win32k_js
 #endif
     /* Reads offset to pDeskInfo from beginning of tagDESKTOP */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
-                           vmi, w32k_json, "tagDESKTOP", "pDeskInfo",
-                           &off.desk_pdeskinfo_off))
+            vmi, w32k_json, "tagDESKTOP", "pDeskInfo",
+            &off.desk_pdeskinfo_off))
     {
         fprintf(stderr, "Error reading offset to pDeskInfo from tagDESKTOP\n");
         return VMI_FAILURE;
@@ -475,8 +475,8 @@ status_t find_offsets_from_win32k_json(vmi_instance_t vmi, const char* win32k_js
 
     /* Reads offset to rpdeskNext from beginning of tagDESKTOP */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
-                           vmi, w32k_json, "tagDESKTOP", "rpdeskNext",
-                           &off.desk_rpdesk_next_off))
+            vmi, w32k_json, "tagDESKTOP", "rpdeskNext",
+            &off.desk_rpdesk_next_off))
     {
         fprintf(stderr, "Error reading offset to desk_rpdesk_next_off from tagDESKTOP\n");
         return VMI_FAILURE;
@@ -484,8 +484,8 @@ status_t find_offsets_from_win32k_json(vmi_instance_t vmi, const char* win32k_js
 
     /* Reads offset to rpwinstaParent from beginning of tagDESKTOP */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
-                           vmi, w32k_json, "tagDESKTOP", "rpwinstaParent",
-                           &off.desk_pwinsta_parent))
+            vmi, w32k_json, "tagDESKTOP", "rpwinstaParent",
+            &off.desk_pwinsta_parent))
     {
         fprintf(stderr, "Error reading offset to rpwinstaParent from tagDESKTOP\n");
         return VMI_FAILURE;
@@ -493,8 +493,8 @@ status_t find_offsets_from_win32k_json(vmi_instance_t vmi, const char* win32k_js
 
     /* Reads offset to rpdeskNext from beginning of tagDESKTOP */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
-                           vmi, w32k_json, "tagDESKTOP", "dwDesktopId",
-                           &off.desk_desktopid_off))
+            vmi, w32k_json, "tagDESKTOP", "dwDesktopId",
+            &off.desk_desktopid_off))
     {
         fprintf(stderr, "Error reading offset to dwDesktopId from tagDESKTOP\n");
         return VMI_FAILURE;
@@ -502,8 +502,8 @@ status_t find_offsets_from_win32k_json(vmi_instance_t vmi, const char* win32k_js
 
     /* Reads offset to spwnd from beginning of tagDESKTOPINFO */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
-                           vmi, w32k_json, "tagDESKTOPINFO", "spwnd",
-                           &off.deskinfo_spwnd_offset))
+            vmi, w32k_json, "tagDESKTOPINFO", "spwnd",
+            &off.deskinfo_spwnd_offset))
     {
         fprintf(stderr, "Error reading offset to dwDesktopId from tagDESKTOP\n");
         return VMI_FAILURE;
@@ -517,8 +517,8 @@ status_t find_offsets_from_win32k_json(vmi_instance_t vmi, const char* win32k_js
 #endif
     /* Reads offset to rcWindow from beginning of tagWND */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
-                           vmi, w32k_json, "tagWND", "rcWindow",
-                           &off.rc_wnd_offset))
+            vmi, w32k_json, "tagWND", "rcWindow",
+            &off.rc_wnd_offset))
     {
         fprintf(stderr, "Error reading offset to rcWindow from tagWND\n");
         return VMI_FAILURE;
@@ -526,8 +526,8 @@ status_t find_offsets_from_win32k_json(vmi_instance_t vmi, const char* win32k_js
 
     /* Reads offset to rcWindow from beginning of tagWND */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
-                           vmi, w32k_json, "tagWND", "rcWindow",
-                           &off.rc_wnd_offset))
+            vmi, w32k_json, "tagWND", "rcWindow",
+            &off.rc_wnd_offset))
     {
         fprintf(stderr, "Error reading offset to rcWindow from tagWND\n");
         return VMI_FAILURE;
@@ -535,8 +535,8 @@ status_t find_offsets_from_win32k_json(vmi_instance_t vmi, const char* win32k_js
 
     /* Reads offset to rcClient from beginning of tagWND */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
-                           vmi, w32k_json, "tagWND", "rcClient",
-                           &off.rc_client_offset))
+            vmi, w32k_json, "tagWND", "rcClient",
+            &off.rc_client_offset))
     {
         fprintf(stderr, "Error reading offset to rcClient from tagWND\n");
         return VMI_FAILURE;
@@ -544,8 +544,8 @@ status_t find_offsets_from_win32k_json(vmi_instance_t vmi, const char* win32k_js
 
     /* Reads offset to spwndNext from beginning of tagWND */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
-                           vmi, w32k_json, "tagWND", "spwndNext",
-                           &off.spwnd_next))
+            vmi, w32k_json, "tagWND", "spwndNext",
+            &off.spwnd_next))
     {
         fprintf(stderr, "Error reading offset to spwndNext from tagWND\n");
         return VMI_FAILURE;
@@ -553,35 +553,35 @@ status_t find_offsets_from_win32k_json(vmi_instance_t vmi, const char* win32k_js
 
     /* Reads offset to rcClient from beginning of tagWND */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
-                           vmi, w32k_json, "tagWND", "spwndChild",
-                           &off.spwnd_child))
+            vmi, w32k_json, "tagWND", "spwndChild",
+            &off.spwnd_child))
     {
         fprintf(stderr, "Error reading offset to spwndChild from tagWND\n");
         return VMI_FAILURE;
     }
-    
+
     /* Reads offset to style from beginning of tagWND */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
-                           vmi, w32k_json, "tagWND", "style",
-                           &off.wnd_style))
+            vmi, w32k_json, "tagWND", "style",
+            &off.wnd_style))
     {
         fprintf(stderr, "Error reading offset to style from tagWND\n");
         return VMI_FAILURE;
     }
-    
+
     /* Reads offset to ExStyle from beginning of tagWND */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
-                           vmi, w32k_json, "tagWND", "ExStyle",
-                           &off.wnd_exstyle))
+            vmi, w32k_json, "tagWND", "ExStyle",
+            &off.wnd_exstyle))
     {
         fprintf(stderr, "Error reading offset to ExStyle from tagWND\n");
         return VMI_FAILURE;
     }
-    
+
     /* Reads offset to pcls from beginning of tagWND */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
-                           vmi, w32k_json, "tagWND", "pcls",
-                           &off.pcls_offset))
+            vmi, w32k_json, "tagWND", "pcls",
+            &off.pcls_offset))
     {
         fprintf(stderr, "Error reading offset to pcls from tagWND\n");
         return VMI_FAILURE;
@@ -589,8 +589,8 @@ status_t find_offsets_from_win32k_json(vmi_instance_t vmi, const char* win32k_js
 
     /* Reads offset to strName from beginning of tagWND */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
-                           vmi, w32k_json, "tagWND", "strName",
-                           &off.wnd_strname_offset))
+            vmi, w32k_json, "tagWND", "strName",
+            &off.wnd_strname_offset))
     {
         fprintf(stderr, "Error reading offset to strName from tagWND\n");
         return VMI_FAILURE;
@@ -598,64 +598,64 @@ status_t find_offsets_from_win32k_json(vmi_instance_t vmi, const char* win32k_js
 
     /* Reads offset to Buffer from beginning of _LARGE_UNICODE_STRING */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
-                           vmi, w32k_json, "_LARGE_UNICODE_STRING", "Buffer",
-                           &off.large_unicode_buf_offset))
+            vmi, w32k_json, "_LARGE_UNICODE_STRING", "Buffer",
+            &off.large_unicode_buf_offset))
     {
         fprintf(stderr, "Error reading offset to Buffer from _LARGE_UNICODE_STRING\n");
         return VMI_FAILURE;
     }
-    
+
     /* Reads offset to left-field from beginning of tagRECT */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
-                           vmi, w32k_json, "tagRECT", "left",
-                           &off.rect_left_offset))
+            vmi, w32k_json, "tagRECT", "left",
+            &off.rect_left_offset))
     {
         fprintf(stderr, "Error reading offset to left-field from tagRECT\n");
         return VMI_FAILURE;
     }
-    
+
     /* Reads offset to top-field from beginning of tagRECT */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
-                           vmi, w32k_json, "tagRECT", "top",
-                           &off.rect_top_offset))
+            vmi, w32k_json, "tagRECT", "top",
+            &off.rect_top_offset))
     {
         fprintf(stderr, "Error reading offset to top-field from tagRECT\n");
         return VMI_FAILURE;
     }
-    
+
     /* Reads offset to right-field from beginning of tagRECT */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
-                           vmi, w32k_json, "tagRECT", "right",
-                           &off.rect_right_offset))
+            vmi, w32k_json, "tagRECT", "right",
+            &off.rect_right_offset))
     {
         fprintf(stderr, "Error reading offset to right-field from tagRECT\n");
         return VMI_FAILURE;
     }
-    
+
     /* Reads offset to bottom-field from beginning of tagRECT */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
-                           vmi, w32k_json, "tagRECT", "bottom",
-                           &off.rect_bottom_offset))
+            vmi, w32k_json, "tagRECT", "bottom",
+            &off.rect_bottom_offset))
     {
         fprintf(stderr, "Error reading offset to bottom-field from tagRECT\n");
         return VMI_FAILURE;
     }
-    
-    /* 
-     * Reads offset to atomClassName from beginning of tagCLS 
+
+    /*
+     * Reads offset to atomClassName from beginning of tagCLS
      *
-     * This contains the key for the atom table 
+     * This contains the key for the atom table
      * See https://www.geoffchappell.com/studies/windows/win32/user32/structs/\
      * cls.htm?tx=56
      */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
-                           vmi, w32k_json, "tagCLS", "atomClassName",
-                           &off.cls_atom_offset))
+            vmi, w32k_json, "tagCLS", "atomClassName",
+            &off.cls_atom_offset))
     {
         fprintf(stderr, "Error reading offset to atomClassName from tagCLS\n");
         return VMI_FAILURE;
     }
-    
+
     return VMI_SUCCESS;
 }
 status_t find_offsets(vmi_instance_t vmi, const char* kernel_json, const char* win32k_json)
@@ -668,10 +668,10 @@ status_t find_offsets(vmi_instance_t vmi, const char* kernel_json, const char* w
         return VMI_FAILURE;
     }
 
-    if(VMI_FAILURE == find_offsets_from_ntoskrnl_json(vmi, kernel_json))
+    if (VMI_FAILURE == find_offsets_from_ntoskrnl_json(vmi, kernel_json))
         return VMI_FAILURE;
 
-    if(VMI_FAILURE == find_offsets_from_win32k_json(vmi, win32k_json))
+    if (VMI_FAILURE == find_offsets_from_win32k_json(vmi, win32k_json))
         return VMI_FAILURE;
 
     return VMI_SUCCESS;
@@ -704,10 +704,10 @@ wchar_t* read_wchar_str_pid(vmi_instance_t vmi, addr_t start, size_t len, vmi_pi
             free(s);
             return NULL;
         }
-            
+
         s[i] = (wchar_t)c;
 
-        if(s[i] == L'\0')
+        if (s[i] == L'\0')
             break;
     }
     return s;
@@ -1532,14 +1532,14 @@ void clean_up(vmi_instance_t vmi)
 status_t vmi_reconstruct_gui(uint64_t domid, const char* kernel_json, const char* win32k_json)
 {
     vmi_instance_t vmi = {0};
-    
+
     void* input = (void*)&domid;
-    void* config = (void*)kernel_json;  
+    void* config = (void*)kernel_json;
 
     /* Initializes the libvmi library */
     if (VMI_FAILURE == vmi_init_complete(
-                           &vmi, input, VMI_INIT_DOMAINID, NULL,
-                           VMI_CONFIG_JSON_PATH, config, NULL))
+            &vmi, input, VMI_INIT_DOMAINID, NULL,
+            VMI_CONFIG_JSON_PATH, config, NULL))
     {
         printf("Failed to init LibVMI library.\n");
         clean_up(vmi);
@@ -1673,9 +1673,9 @@ int main(int argc, char** argv)
 #ifdef DEBUG
     printf("CLI-Parameters\n");
     printf("\tDom ID: %ld\n", domid);
-    printf("\tKernel-JSON: %s\n",kernel_json);
-    printf("\tWin32k-JSON: %s\n",win32k_json);
-#endif 
+    printf("\tKernel-JSON: %s\n", kernel_json);
+    printf("\tWin32k-JSON: %s\n", win32k_json);
+#endif
 
     status_t ret = vmi_reconstruct_gui(domid, kernel_json, win32k_json);
 
