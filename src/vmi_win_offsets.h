@@ -79,7 +79,7 @@ struct Offsets
     addr_t cls_atom_offset;
 } off; /* All fields are initialized to zero */
 
-status_t find_offsets_from_ntoskrnl_json(vmi_instance_t vmi, const char* kernel_json)
+status_t find_offsets_from_ntkrpamp_json(vmi_instance_t vmi, const char* kernel_json)
 {
     /*
      * Parse IST-file containing debugging information to retrieve offsets
@@ -90,9 +90,10 @@ status_t find_offsets_from_ntoskrnl_json(vmi_instance_t vmi, const char* kernel_
 
     if (!profile)
     {
-        fprintf(stderr, "Error win32k-JSON at %s\n", kernel_json);
+        fprintf(stderr, "Error ntkrpamp-JSON at %s\n", kernel_json);
         return VMI_FAILURE;
     }
+
     /* Find offsets within _EPROCESS */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
             vmi, profile, "_EPROCESS", "ActiveProcessLinks",
@@ -520,7 +521,7 @@ status_t find_offsets(vmi_instance_t vmi, const char* kernel_json, const char* w
         return VMI_FAILURE;
     }
 
-    if (VMI_FAILURE == find_offsets_from_ntoskrnl_json(vmi, kernel_json))
+    if (VMI_FAILURE == find_offsets_from_ntkrpamp_json(vmi, kernel_json))
         return VMI_FAILURE;
 
     if (VMI_FAILURE == find_offsets_from_win32k_json(vmi, win32k_json))
