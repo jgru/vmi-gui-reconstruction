@@ -22,7 +22,7 @@
 /* Graphics rendering */
 #include "gfx.h"
 
-#define DEBUG
+//#define DEBUG
 
 #define LEN_WIN_LIST 0x100
 
@@ -68,6 +68,7 @@ struct winsta_container
     bool is_interactive;
     size_t len_desktops;
     addr_t* desktops;
+    const char* name; 
 };
 
 struct rect_container
@@ -158,6 +159,7 @@ int sort_wnd_container(gconstpointer a, gconstpointer b)
     res = ((struct wnd_container*)b)->level - ((struct wnd_container*)a)->level;
     return res;
 }
+
 /*
  * Read a Windows wchar-string into a wchar_t*, since vmi_read_unicode_str_va
  * fails to parse _RTL_ATOM_ENTRY's name-string. Expansion is performed since
@@ -189,6 +191,55 @@ wchar_t* read_wchar_str(vmi_instance_t vmi, addr_t start, size_t len)
 {
     return read_wchar_str_pid(vmi, start, len, 0);
 }
+
+/* 
+ * Checks, wether the _OBJECT_HEADER, which precedes every executive object,
+ * is preceded by an optional header of type _OBJECT_HEADER_NAME_INFO. 
+ * If this is the case, the name of the executive object is read and returned.
+ */
+const char* retrieve_objhdr_name(vmi_instance_t vmi, addr_t addr, vmi_pid_t pid)
+{
+    addr_t obj_hdr = 0;
+    addr_t obj_hdr_nameinfo_addr= 0; 
+    //addr_t name_addr = 0;
+    uint8_t im = 0; 
+    const char* name = NULL;
+    unicode_string_t* us = NULL;
+    unicode_string_t out = { .contents = NULL };
+
+    obj_hdr = addr - off.objhdr_body_offset; 
+    obj_hdr_nameinfo_addr = obj_hdr;
+
+    if(VMI_FAILURE == vmi_read_8_va(vmi, obj_hdr + off.objhdr_infomask_offset, 
+        0, &im))
+    {
+        fprintf(stderr, "Error reading InfoMask from _OBJECT_HEADER at: %" PRIx64 "\n", obj_hdr);
+        return NULL;
+    }
+
+    /* Checks, if there is a _OBJECT_HEADER_CREATOR_INFO after *NAME_INFO */ 
+    if(im & OBJ_HDR_INFOMASK_CREATOR_INFO)
+        obj_hdr_nameinfo_addr -= off.objhdr_creator_info_length;
+
+    /* Returns, if there is no _OBJECT_HEADER_NAME_INFO */ 
+    if(!(im & OBJ_HDR_INFOMASK_NAME))
+        return NULL;
+
+    obj_hdr_nameinfo_addr -= off.objhdr_name_info_length;
+    
+    us = vmi_read_unicode_str_va(vmi, obj_hdr_nameinfo_addr + off.objhdr_name_info_name_offset, pid);
+
+    if(us && VMI_SUCCESS == vmi_convert_str_encoding(us, &out, "UTF-8"))
+    {
+        name = strndup((char*) out.contents, out.length);
+        free(out.contents);  
+    }
+    
+    if (us)
+        vmi_free_unicode_str(us);
+
+    return name;
+} 
 
 void draw_single_wnd_container(struct wnd_container* w)
 {
@@ -551,7 +602,7 @@ GArray* retrieve_windows_from_desktop(vmi_instance_t vmi, addr_t desktop, vmi_pi
 
     addr_t desktop_info;
     addr = desktop + off.desk_pdeskinfo_off;
-    // Retrieves pointer desktop info struct
+    /* Retrieves pointer desktop info struct */
     if (VMI_FAILURE == vmi_read_addr_va(vmi, addr, pid, &desktop_info))
     {
         printf("\t\tFailed to read pointer to _DESKTOPINFO at %" PRIx64 "\n", desktop + off.desk_pdeskinfo_off);
@@ -682,9 +733,13 @@ status_t populate_winsta(vmi_instance_t vmi, struct winsta_container* winsta, ad
     }
     winsta->len_desktops = len;
 
+    winsta->name = retrieve_objhdr_name(vmi, addr, providing_pid); 
 #ifdef DEBUG
-    printf("\tAtom table at %" PRIx64 "\n", winsta->atom_table);
     printf("\tSession ID %" PRId32 "\n", winsta->session_id);
+    
+    if(winsta->name)
+        printf("\tName: %s\n", winsta->name);
+    printf("\tAtom table at %" PRIx64 "\n", winsta->atom_table);
     printf("\tFound %ld desktops\n", winsta->len_desktops);
 #endif
 
@@ -739,13 +794,14 @@ status_t retrieve_winstas_from_procs(vmi_instance_t vmi, struct winsta_container
             return VMI_FAILURE;
         }
 
+        /* Print out the process name */
+        printf("[%5d] %s (struct addr:%" PRIx64 ")\n", pid, procname, current_process);
+
         if (procname)
         {
             free(procname);
             procname = NULL;
         }
-        /* Print out the process name */
-        printf("[%5d] %s (struct addr:%" PRIx64 ")\n", pid, procname, current_process);
 
         printf("\tThreadListHead at: %" PRIx64 "\n", thrd_list_head);
 #endif
@@ -829,7 +885,7 @@ status_t retrieve_winstas_from_procs(vmi_instance_t vmi, struct winsta_container
                 }
                 if (!is_known && i < max_len)
                 {
-                    struct winsta_container wc;
+                    struct winsta_container wc = {0};
                     populate_winsta(vmi, &wc, cur_pwinsta, pid);
                     winstas[i] = wc;
                     winsta_count++;
@@ -1071,6 +1127,9 @@ status_t vmi_reconstruct_gui(uint64_t domid, const char* kernel_json, const char
         printf("# %" PRId32 "\n", winstas[i].session_id);
     }
     printf("-------------------------------------\n\n");
+    
+    clean_up(vmi);
+    return VMI_SUCCESS;
 
     for (size_t i = 0; i < len; i++)
     {
