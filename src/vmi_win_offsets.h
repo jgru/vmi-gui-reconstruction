@@ -4,36 +4,37 @@
 #define LIBVMI_EXTRA_JSON
 #include <libvmi/libvmi.h>
 #include <libvmi/libvmi_extra.h>
+
 //#define DEBUG
 
-/* 
- * Flag in _OBJECT_HEADER InfoMask field, indicating the presence of the 
+/*
+ * Flag in _OBJECT_HEADER InfoMask field, indicating the presence of the
  * specified struct in fornt of the _OBJECT_HEADER
  */
-#define OBJ_HDR_INFOMASK_CREATOR_INFO 0x01 
+#define OBJ_HDR_INFOMASK_CREATOR_INFO 0x01
 #define OBJ_HDR_INFOMASK_NAME 0x02
 
 struct Offsets
 {
     addr_t ps_active_process_head;
 
-    
+
     /* _OBJECT_HEADER_NAME_INFO  */
-    addr_t objhdr_name_info_length; 
+    addr_t objhdr_name_info_length;
     addr_t objhdr_name_info_name_offset;  /* _UNICODE_STRING */
-    
+
     /* _OBJECT_HEADER_CREATOR_INFO  */
-    addr_t objhdr_creator_info_length; 
+    addr_t objhdr_creator_info_length;
 
     /* _OBJECT_HEADER */
     /* Nominal length */
-    addr_t objhdr_length; 
-    /* 
-     * Offset to the body, which resembles the effective length, 
-     * as it is seen from the executive object 
+    addr_t objhdr_length;
+    /*
+     * Offset to the body, which resembles the effective length,
+     * as it is seen from the executive object
      */
     addr_t objhdr_body_offset;
-    addr_t objhdr_infomask_offset; 
+    addr_t objhdr_infomask_offset;
 
     /* For _EPROCESS */
     addr_t active_proc_links_offset;
@@ -120,10 +121,10 @@ status_t find_offsets_from_ntkrpamp_json(vmi_instance_t vmi, const char* kernel_
         return VMI_FAILURE;
     }
 
-     /* Find size of _OBJECT_HEADER */
+    /* Find size of _OBJECT_HEADER */
     if (VMI_FAILURE == vmi_get_struct_size_from_json(
-                           vmi, profile, "_OBJECT_HEADER", 
-                           &off.objhdr_length))
+            vmi, profile, "_OBJECT_HEADER",
+            &off.objhdr_length))
     {
         printf("Error retrieving size of _OBJECT_HEADER-struct : %ld\n",
             off.objhdr_length);
@@ -142,8 +143,8 @@ status_t find_offsets_from_ntkrpamp_json(vmi_instance_t vmi, const char* kernel_
 
     /* Find size of _OBJECT_HEADER_CREATOR_INFO */
     if (VMI_FAILURE == vmi_get_struct_size_from_json(
-                           vmi, profile, "_OBJECT_HEADER_CREATOR_INFO", 
-                           &off.objhdr_creator_info_length))
+            vmi, profile, "_OBJECT_HEADER_CREATOR_INFO",
+            &off.objhdr_creator_info_length))
     {
         printf("Error retrieving size of -struct : %ld\n",
             off.objhdr_creator_info_length);
@@ -160,16 +161,16 @@ status_t find_offsets_from_ntkrpamp_json(vmi_instance_t vmi, const char* kernel_
         return VMI_FAILURE;
     }
 
-     /* Find size of _OBJECT_HEADER_NAME_INFO */
+    /* Find size of _OBJECT_HEADER_NAME_INFO */
     if (VMI_FAILURE == vmi_get_struct_size_from_json(
-                           vmi, profile, "_OBJECT_HEADER_NAME_INFO", 
-                           &off.objhdr_name_info_length))
+            vmi, profile, "_OBJECT_HEADER_NAME_INFO",
+            &off.objhdr_name_info_length))
     {
         printf("Error retrieving size of _OBJECT_HEADER_NAME_INFO-struct : %ld\n",
             off.objhdr_name_info_length);
         return VMI_FAILURE;
     }
-    
+
     /* Find offset to Name-field of _OBJECT_HEADER_NAME_INFO */
     if (VMI_FAILURE == vmi_get_struct_member_offset_from_json(
             vmi, profile, "_OBJECT_HEADER_NAME_INFO", "Name",

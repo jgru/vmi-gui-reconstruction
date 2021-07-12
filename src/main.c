@@ -68,7 +68,7 @@ struct winsta_container
     bool is_interactive;
     size_t len_desktops;
     addr_t* desktops;
-    const char* name; 
+    const char* name;
 };
 
 struct rect_container
@@ -192,54 +192,54 @@ wchar_t* read_wchar_str(vmi_instance_t vmi, addr_t start, size_t len)
     return read_wchar_str_pid(vmi, start, len, 0);
 }
 
-/* 
+/*
  * Checks, wether the _OBJECT_HEADER, which precedes every executive object,
- * is preceded by an optional header of type _OBJECT_HEADER_NAME_INFO. 
+ * is preceded by an optional header of type _OBJECT_HEADER_NAME_INFO.
  * If this is the case, the name of the executive object is read and returned.
  */
-const char* retrieve_objhdr_name(vmi_instance_t vmi, addr_t addr, vmi_pid_t pid)
+const char* retrieve_objhdr_name(vmi_instance_t vmi, addr_t addr)
 {
     addr_t obj_hdr = 0;
-    addr_t obj_hdr_nameinfo_addr= 0; 
+    addr_t obj_hdr_nameinfo_addr= 0;
     //addr_t name_addr = 0;
-    uint8_t im = 0; 
+    uint8_t im = 0;
     const char* name = NULL;
     unicode_string_t* us = NULL;
     unicode_string_t out = { .contents = NULL };
 
-    obj_hdr = addr - off.objhdr_body_offset; 
+    obj_hdr = addr - off.objhdr_body_offset;
     obj_hdr_nameinfo_addr = obj_hdr;
 
-    if(VMI_FAILURE == vmi_read_8_va(vmi, obj_hdr + off.objhdr_infomask_offset, 
-        0, &im))
+    if (VMI_FAILURE == vmi_read_8_va(vmi, obj_hdr + off.objhdr_infomask_offset,
+            0, &im))
     {
         fprintf(stderr, "Error reading InfoMask from _OBJECT_HEADER at: %" PRIx64 "\n", obj_hdr);
         return NULL;
     }
 
-    /* Checks, if there is a _OBJECT_HEADER_CREATOR_INFO after *NAME_INFO */ 
-    if(im & OBJ_HDR_INFOMASK_CREATOR_INFO)
+    /* Checks, if there is a _OBJECT_HEADER_CREATOR_INFO after *NAME_INFO */
+    if (im & OBJ_HDR_INFOMASK_CREATOR_INFO)
         obj_hdr_nameinfo_addr -= off.objhdr_creator_info_length;
 
-    /* Returns, if there is no _OBJECT_HEADER_NAME_INFO */ 
-    if(!(im & OBJ_HDR_INFOMASK_NAME))
+    /* Returns, if there is no _OBJECT_HEADER_NAME_INFO */
+    if (!(im & OBJ_HDR_INFOMASK_NAME))
         return NULL;
 
     obj_hdr_nameinfo_addr -= off.objhdr_name_info_length;
-    
-    us = vmi_read_unicode_str_va(vmi, obj_hdr_nameinfo_addr + off.objhdr_name_info_name_offset, pid);
 
-    if(us && VMI_SUCCESS == vmi_convert_str_encoding(us, &out, "UTF-8"))
+    us = vmi_read_unicode_str_va(vmi, obj_hdr_nameinfo_addr + off.objhdr_name_info_name_offset, 0);
+
+    if (us && VMI_SUCCESS == vmi_convert_str_encoding(us, &out, "UTF-8"))
     {
         name = strndup((char*) out.contents, out.length);
-        free(out.contents);  
+        free(out.contents);
     }
-    
+
     if (us)
         vmi_free_unicode_str(us);
 
     return name;
-} 
+}
 
 void draw_single_wnd_container(struct wnd_container* w)
 {
@@ -362,15 +362,27 @@ status_t draw_single_window(vmi_instance_t vmi, addr_t win, vmi_pid_t pid)
     return ret;
 }
 
-status_t draw_windows(vmi_instance_t vmi, int width, int height, GArray* windows, vmi_pid_t pid)
+int draw_windows(vmi_instance_t vmi, GArray* windows)
 {
+    struct wnd_container* wnd;
+    int w, h;
+
+    if (!windows)
+        return -1;
+
+    wnd = g_array_index(windows, struct wnd_container*, 0);
+
+    if (!wnd)
+        return -1;
+
+    w = wnd->r.x1;
+    h = wnd->r.y1;
+
     /* Prepare drawing */
-    gfx_open(1280, 720, "GUI Reconstruction");
+    gfx_open(w, h, "GUI Reconstruction");
     gfx_clear_color(255, 255, 255);
     gfx_clear();
     gfx_color(0, 0, 0);
-
-    struct wnd_container* wnd = 0;
 
     for (size_t i = 0; i < windows->len; i++)
     {
@@ -388,7 +400,7 @@ status_t draw_windows(vmi_instance_t vmi, int width, int height, GArray* windows
 
     gfx_close();
 
-    return VMI_SUCCESS;
+    return 0;
 }
 
 GHashTable* copy_hashtable(GHashTable* src)
@@ -733,11 +745,11 @@ status_t populate_winsta(vmi_instance_t vmi, struct winsta_container* winsta, ad
     }
     winsta->len_desktops = len;
 
-    winsta->name = retrieve_objhdr_name(vmi, addr, providing_pid); 
+    winsta->name = retrieve_objhdr_name(vmi, addr);
 #ifdef DEBUG
     printf("\tSession ID %" PRId32 "\n", winsta->session_id);
-    
-    if(winsta->name)
+
+    if (winsta->name)
         printf("\tName: %s\n", winsta->name);
     printf("\tAtom table at %" PRIx64 "\n", winsta->atom_table);
     printf("\tFound %ld desktops\n", winsta->len_desktops);
@@ -1048,6 +1060,7 @@ GHashTable* build_atom_table(vmi_instance_t vmi, addr_t table_addr)
     return ht;
 }
 
+
 void clean_up(vmi_instance_t vmi)
 {
     /* Resumes the vm */
@@ -1057,7 +1070,47 @@ void clean_up(vmi_instance_t vmi)
     vmi_destroy(vmi);
 }
 
-status_t vmi_reconstruct_gui(uint64_t domid, const char* kernel_json, const char* win32k_json)
+GArray* find_first_active_desktop(vmi_instance_t vmi)
+{
+    size_t len = 0;
+    struct winsta_container* winstas = NULL;
+    const char* desk_name = NULL;
+
+    /* Gathers windows stations with all desktops by iterating over all procs */
+    if (VMI_FAILURE == retrieve_winstas_from_procs(vmi, &winstas, &len))
+    {
+        return NULL;
+    }
+
+    for (size_t i = 0; i < len; i++)
+    {
+        /* Ignore session 0 */
+        if (winstas[i].session_id == 0)
+            continue;
+
+        /* Discard with a name different than WinSta0 and non-interactive window stations */
+        if (!winstas[i].is_interactive)
+            continue;
+
+        /* Only take WinSta0 into account */
+        if (winstas[i].name && strcmp(winstas[i].name, "WinSta0") != 0)
+            continue;
+
+        for (size_t j = 0; j < winstas[i].len_desktops; j++)
+        {
+            desk_name = retrieve_objhdr_name(vmi, winstas[i].desktops[j]);
+
+            if (desk_name && strncmp(desk_name, "Default\0", 8) != 0)
+                continue;
+
+            return retrieve_windows_from_desktop(
+                    vmi, winstas[i].desktops[j], winstas[i].providing_pid);
+        }
+    }
+
+    return NULL;
+}
+status_t vmi_reconstruct_gui(uint64_t domid, const char* kernel_json, const char* win32k_json, bool is_show_all)
 {
     vmi_instance_t vmi = {0};
 
@@ -1104,51 +1157,58 @@ status_t vmi_reconstruct_gui(uint64_t domid, const char* kernel_json, const char
         return VMI_FAILURE;
     }
 
-    size_t len = 0;
-    struct winsta_container* winstas = NULL;
-
-    /* Gathers windows stations with all desktops by iterating over all procs */
-    if (VMI_FAILURE == retrieve_winstas_from_procs(vmi, &winstas, &len))
+    if (is_show_all)
     {
-        clean_up(vmi);
-        return VMI_FAILURE;
-    }
+        size_t len = 0;
+        struct winsta_container* winstas = NULL;
 
-    printf("\nAddr     \tInteractive?\tSession\n");
-    printf("-------------------------------------\n");
-    for (size_t i = 0; i < len; i++)
-    {
-        printf("%" PRIx64 "\t", winstas[i].addr);
-        if (winstas[i].is_interactive)
-            printf("Interactive\t");
-        else
-            printf("Not interactive\t");
-
-        printf("# %" PRId32 "\n", winstas[i].session_id);
-    }
-    printf("-------------------------------------\n\n");
-    
-    clean_up(vmi);
-    return VMI_SUCCESS;
-
-    for (size_t i = 0; i < len; i++)
-    {
-        printf("[*] WinSta # %" PRId32 " at %" PRIx64 "\n", winstas[i].session_id, winstas[i].addr);
-
-#ifdef DEBUG
-        GHashTable* atom_table = build_atom_table(vmi, winstas[i].atom_table);
-        print_atom_table(atom_table);
-        g_hash_table_destroy(atom_table);
-#endif
-        for (size_t j = 0; j < winstas[i].len_desktops; j++)
+        /* Gathers windows stations with all desktops by iterating over all procs */
+        if (VMI_FAILURE == retrieve_winstas_from_procs(vmi, &winstas, &len))
         {
+            clean_up(vmi);
+            return VMI_FAILURE;
+        }
 
-            printf("Retrieving windows for desktop %" PRIx64 "\n", winstas[i].desktops[j]);
-            GArray* windows = retrieve_windows_from_desktop(vmi, winstas[i].desktops[j], winstas[i].providing_pid);
-            draw_windows(vmi, 1024, 768, windows, winstas[i].providing_pid);
-            g_array_free(windows, true);
+        printf("\nAddr     \tInteractive?\tSession\tName\n");
+        printf("-------------------------------------\n");
+        for (size_t i = 0; i < len; i++)
+        {
+            printf("%" PRIx64 "\t", winstas[i].addr);
+            if (winstas[i].is_interactive)
+                printf("Interactive\t");
+            else
+                printf("Not interactive\t");
+
+            printf("# %" PRId32 "\t", winstas[i].session_id);
+            printf("%s\n", winstas[i].name);
         }
         printf("-------------------------------------\n\n");
+
+        for (size_t i = 0; i < len; i++)
+        {
+            printf("[*] WinSta # %" PRId32 " at %" PRIx64 "\n", winstas[i].session_id, winstas[i].addr);
+
+#ifdef DEBUG
+            GHashTable* atom_table = build_atom_table(vmi, winstas[i].atom_table);
+            print_atom_table(atom_table);
+            g_hash_table_destroy(atom_table);
+#endif
+            for (size_t j = 0; j < winstas[i].len_desktops; j++)
+            {
+
+                printf("Retrieving windows for desktop %" PRIx64 "\n", winstas[i].desktops[j]);
+                GArray* windows = retrieve_windows_from_desktop(vmi, winstas[i].desktops[j], winstas[i].providing_pid);
+                if (windows)
+                    draw_windows(vmi, windows);
+                g_array_free(windows, true);
+            }
+            printf("-------------------------------------\n\n");
+        }
+    }
+    else
+    {
+        GArray* windows = find_first_active_desktop(vmi);
+        draw_windows(vmi, windows);
     }
 
     // https://resources.infosecinstitute.com/topic/windows-gui-forensics-session-objects-window-stations-and-desktop/
@@ -1161,6 +1221,7 @@ int main(int argc, char** argv)
     uint64_t domid = 0;
     const char* kernel_json = NULL;
     const char* win32k_json = NULL;
+    int show_all_flag = 0;
 
     if (argc < 2)
     {
@@ -1177,9 +1238,10 @@ int main(int argc, char** argv)
             {"domid", required_argument, NULL, 'd'},
             {"kernel", required_argument, NULL, 'k'},
             {"win32k", required_argument, NULL, 'w'},
+            {"all", no_argument, NULL, 'a'},
             {NULL, 0, NULL, 0}
         };
-        const char* opts = "n:d:k:w:";
+        const char* opts = ":d:k:w:a";
         int c;
         int long_index = 0;
 
@@ -1195,6 +1257,9 @@ int main(int argc, char** argv)
                 case 'w':
                     win32k_json = optarg;
                     break;
+                case 'a':
+                    show_all_flag = 1;
+                    break;
                 default:
                     printf("Unknown option\n");
                     exit(EXIT_FAILURE);
@@ -1208,7 +1273,7 @@ int main(int argc, char** argv)
     printf("\tWin32k-JSON: %s\n", win32k_json);
 #endif
 
-    status_t ret = vmi_reconstruct_gui(domid, kernel_json, win32k_json);
+    status_t ret = vmi_reconstruct_gui(domid, kernel_json, win32k_json, show_all_flag);
 
     if (ret == VMI_SUCCESS)
         exit(EXIT_SUCCESS);
