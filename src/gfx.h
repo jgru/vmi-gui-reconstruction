@@ -9,7 +9,6 @@
  * For complete documentation, see:
  * http://www.nd.edu/~dthain/courses/cse20211/fall2013/gfx
  */
-
 #ifndef GFX_H
 #define GFX_H
 #include <wchar.h>
