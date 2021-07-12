@@ -19,6 +19,9 @@
 /* Offset retrieval */
 #include "vmi_win_offsets.h"
 
+/* Atom table specific structs and functions */
+#include "vmi_win_atom_table.h"
+
 /* Graphics rendering */
 #include "gfx.h"
 
@@ -38,8 +41,6 @@
 #define WS_EX_ACCEPTFILES 0x00000010
 #define WS_EX_TRANSPARENT 0x00000020
 
-#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
-
 #define TEXT_OFFSET 5
 
 /* Holds struct-offsets, needed to access relevant fields */
@@ -54,7 +55,7 @@ struct winsta_container
 {
     addr_t addr;
     /*
-     * For	each GUI thread, win32k	maps, the associated desktop heap into the user-­‐mode
+     * For each GUI thread, win32k maps, the associated desktop heap into the user-­‐mode
      * http://mista.nu/research/mandt-win32k-slides.pdf
      *
      * Therefore do it like volatility: Find a process with matching sessionID and take its VA as _MM_SESSION_SPACE for the WinSta
@@ -79,16 +80,6 @@ struct rect_container
     uint32_t y1;
 };
 
-struct atom_entry
-{
-    uint16_t atom;
-    uint16_t ref_count;
-    addr_t hashlink;
-    uint8_t name_len;
-    wchar_t* name;
-    //unicode_string_t* name;
-};
-
 struct wnd_container
 {
     addr_t spwnd_addr;
@@ -101,144 +92,12 @@ struct wnd_container
     const char* text;
 };
 
-/*
- * Default _RTL_ATOM_ENTRY-structs
- * See https://github.com/volatilityfoundation/volatility/blob/\
- * a438e768194a9e05eb4d9ee9338b881c0fa25937/volatility/plugins/gui/\
- * constants.py#L34
- */
-struct atom_entry ae[] =
-{
-    {
-        .atom = 0x8000,
-        .name = L"PopupMenu",
-        .name_len = 9,
-        .hashlink = 0,
-        .ref_count = 0,
-    },
-    {
-        .atom = 0x8001,
-        .name = L"Desktop",
-        .name_len = 7,
-        .hashlink = 0,
-        .ref_count = 0,
-    },
-    {
-        .atom = 0x8002,
-        .name = L"Dialog",
-        .name_len = 6,
-        .hashlink = 0,
-        .ref_count = 0,
-    },
-    {
-        .atom = 0x8003,
-        .name = L"WinSwitch",
-        .name_len = 9,
-        .hashlink = 0,
-        .ref_count = 0,
-    },
-    {
-        .atom = 0x8004,
-        .name = L"IconTitle",
-        .name_len = 9,
-        .hashlink = 0,
-        .ref_count = 0,
-    },
-    {
-        .atom = 0x8006,
-        .name = L"ToolTip",
-        .name_len = 9,
-        .hashlink = 0,
-        .ref_count = 0,
-    }
-};
 
 int sort_wnd_container(gconstpointer a, gconstpointer b)
 {
     int res = 0;
     res = ((struct wnd_container*)b)->level - ((struct wnd_container*)a)->level;
     return res;
-}
-
-/*
- * Read a Windows wchar-string into a wchar_t*, since vmi_read_unicode_str_va
- * fails to parse _RTL_ATOM_ENTRY's name-string. Expansion is performed since
- * Windows' wchar is 2 bytes versus 4 bytes on 64bit-Linux
- */
-wchar_t* read_wchar_str_pid(vmi_instance_t vmi, addr_t start, size_t len, vmi_pid_t pid)
-{
-    wchar_t* s = malloc(sizeof(wchar_t) * len);
-    memset(s, 0, sizeof(wchar_t) * len);
-
-    for (size_t i = 0; i < len; i++)
-    {
-        uint16_t c = 0;
-        if (VMI_FAILURE == vmi_read_16_va(vmi, start + i * 2, pid, &c))
-        {
-            free(s);
-            return NULL;
-        }
-
-        s[i] = (wchar_t)c;
-
-        if (s[i] == L'\0')
-            break;
-    }
-    return s;
-}
-
-wchar_t* read_wchar_str(vmi_instance_t vmi, addr_t start, size_t len)
-{
-    return read_wchar_str_pid(vmi, start, len, 0);
-}
-
-/*
- * Checks, wether the _OBJECT_HEADER, which precedes every executive object,
- * is preceded by an optional header of type _OBJECT_HEADER_NAME_INFO.
- * If this is the case, the name of the executive object is read and returned.
- */
-const char* retrieve_objhdr_name(vmi_instance_t vmi, addr_t addr)
-{
-    addr_t obj_hdr = 0;
-    addr_t obj_hdr_nameinfo_addr= 0;
-    //addr_t name_addr = 0;
-    uint8_t im = 0;
-    const char* name = NULL;
-    unicode_string_t* us = NULL;
-    unicode_string_t out = { .contents = NULL };
-
-    obj_hdr = addr - off.objhdr_body_offset;
-    obj_hdr_nameinfo_addr = obj_hdr;
-
-    if (VMI_FAILURE == vmi_read_8_va(vmi, obj_hdr + off.objhdr_infomask_offset,
-            0, &im))
-    {
-        fprintf(stderr, "Error reading InfoMask from _OBJECT_HEADER at: %" PRIx64 "\n", obj_hdr);
-        return NULL;
-    }
-
-    /* Checks, if there is a _OBJECT_HEADER_CREATOR_INFO after *NAME_INFO */
-    if (im & OBJ_HDR_INFOMASK_CREATOR_INFO)
-        obj_hdr_nameinfo_addr -= off.objhdr_creator_info_length;
-
-    /* Returns, if there is no _OBJECT_HEADER_NAME_INFO */
-    if (!(im & OBJ_HDR_INFOMASK_NAME))
-        return NULL;
-
-    obj_hdr_nameinfo_addr -= off.objhdr_name_info_length;
-
-    us = vmi_read_unicode_str_va(vmi, obj_hdr_nameinfo_addr + off.objhdr_name_info_name_offset, 0);
-
-    if (us && VMI_SUCCESS == vmi_convert_str_encoding(us, &out, "UTF-8"))
-    {
-        name = strndup((char*) out.contents, out.length);
-        free(out.contents);
-    }
-
-    if (us)
-        vmi_free_unicode_str(us);
-
-    return name;
 }
 
 void draw_single_wnd_container(struct wnd_container* w)
@@ -947,118 +806,6 @@ next_thrd:
     return VMI_SUCCESS;
 }
 
-void print_atom_table(GHashTable* atom_table)
-{
-    GHashTableIter iter;
-
-    g_hash_table_iter_init(&iter, atom_table);
-    struct atom_entry* val;
-    uint16_t key;
-
-    while (g_hash_table_iter_next(&iter, (gpointer)&key, (gpointer)&val))
-    {
-        printf("Atom: %" PRIx16 " %ls\n", key, val->name);
-    }
-}
-
-struct atom_entry* parse_atom_entry(vmi_instance_t vmi, addr_t atom_addr)
-{
-    struct atom_entry* entry = malloc(sizeof(struct atom_entry));
-    memset(entry, 0, sizeof(struct atom_entry));
-
-    if (VMI_FAILURE == vmi_read_addr_va(vmi, atom_addr + off.atom_entry_hashlink_offset, 0, &entry->hashlink))
-    {
-        printf("Error reading HashLink at %" PRIx64 "\n", atom_addr + off.atom_entry_hashlink_offset);
-        return NULL;
-    }
-
-    if (VMI_FAILURE == vmi_read_16_va(vmi, atom_addr + off.atom_entry_atom_offset, 0, (uint16_t*)&entry->atom))
-    {
-        printf("Error reading Atom at %" PRIx64 "\n", atom_addr + off.atom_entry_atom_offset);
-        return NULL;
-    }
-
-    if (VMI_FAILURE == vmi_read_16_va(vmi, atom_addr + off.atom_entry_ref_count_offset, 0, (uint16_t*)&entry->ref_count))
-    {
-        printf("Error reading ReferenceCount at %" PRIx64 "\n", atom_addr + off.atom_entry_ref_count_offset);
-        return NULL;
-    }
-
-    if (VMI_FAILURE == vmi_read_8_va(vmi, atom_addr + off.atom_entry_name_len_offset, 0, (uint8_t*)&entry->name_len))
-    {
-        printf("Error reading NameLength at %" PRIx64 "\n", atom_addr + off.atom_entry_name_len_offset);
-        return NULL;
-    }
-
-    entry->name = read_wchar_str(vmi, atom_addr + off.atom_entry_name_offset, (size_t)entry->name_len);
-
-    if (!entry->name)
-    {
-        printf("Error reading wchar-string Name at %" PRIx64 "\n", atom_addr + off.atom_entry_name_offset);
-    }
-
-    return entry;
-}
-
-void add_default_atoms(GHashTable* atom_table)
-{
-    for (int i = 0; i < ARRAY_SIZE(ae); i++)
-        g_hash_table_insert(atom_table, GUINT_TO_POINTER(ae[i].atom), (gpointer)&ae[i]);
-}
-
-/* https://bsodtutorials.wordpress.com/2015/11/11/understanding-atom-tables/ */
-GHashTable* build_atom_table(vmi_instance_t vmi, addr_t table_addr)
-{
-    uint32_t num_buckets = 0;
-
-    if (VMI_FAILURE == vmi_read_32_va(vmi, table_addr + off.atom_table_num_buckets_off, 0, (uint32_t*)&num_buckets))
-    {
-        printf("Failed to read num buckets-value of _RTL_ATOM_TABLE at %" PRIx64 "\n", table_addr + off.atom_table_num_buckets_off);
-        return NULL;
-    }
-
-    GHashTable* ht = g_hash_table_new(g_direct_hash, g_direct_equal);
-    add_default_atoms(ht);
-
-    size_t i = 0;
-    addr_t cur = 0;
-    struct atom_entry* a = NULL;
-
-    /* Iterate the array of pointers to _RTL_ATOM_TABLE_ENTRY-structs at buckets */
-    while (i < num_buckets)
-    {
-        if (VMI_FAILURE == vmi_read_addr_va(vmi, table_addr + off.atom_table_buckets_off + i * 4, 0, &cur))
-        {
-            printf("Failed to read pointer to buckets entry of _RTL_ATOM_TABLE at %" PRIx64 "\n", table_addr + off.atom_table_buckets_off + i * 4);
-            g_hash_table_destroy(ht);
-            return NULL;
-        }
-        i++;
-
-        if (!cur)
-            continue;
-
-        a = parse_atom_entry(vmi, cur);
-
-        if (a)
-        {
-            g_hash_table_insert(ht, GUINT_TO_POINTER(a->atom), (gpointer)a);
-        }
-        /* Traverses the linked list of each top level _RTL_ATOM_TABLE_ENTRY */
-        while (a && a->hashlink)
-        {
-            cur = a->hashlink;
-            a = parse_atom_entry(vmi, cur);
-
-            if (a)
-            {
-                g_hash_table_insert(ht, GUINT_TO_POINTER(a->atom), (gpointer)a);
-            }
-        }
-    }
-
-    return ht;
-}
 
 
 void clean_up(vmi_instance_t vmi)
