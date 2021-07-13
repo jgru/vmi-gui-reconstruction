@@ -238,11 +238,40 @@ status_t draw_single_window(vmi_instance_t vmi, addr_t win, vmi_pid_t pid)
     return ret;
 }
 
+struct rect_container* get_visible_rect(uint8_t* map, size_t n, struct rect_container* r)
+{   
+    return NULL;    
+}
 /* 
  * Naive assumption, that buttons will be 8 times smaller than the respective
  * desktop dimension 
  */
 #define BTN_RATIO 4
+
+void update_visibility_bitmask(uint8_t* map, size_t n, struct rect_container* r)
+{   
+    int byte, bit_idx;
+    unsigned int bit; 
+
+    for(int x = r->x0; x < r->x1; x++)
+    {
+        for(int y = r->y0; y < r->y1; y++)
+        {   
+
+            byte = x / 8 * y; 
+            //printf(" %d,%d -- %d\n", x, y, byte); 
+            //fflush(stdout);
+            
+            /* Parts of a wnd can be outside of the desktop's frame */
+            if(byte < n)
+            {
+                bit_idx = x % 8;
+                bit = 0x80 >> bit_idx; 
+                map[byte] |= bit;
+            }
+        }
+    }
+}
 
 struct wnd_container* find_button_to_click(GArray* windows, char *t[], size_t tlen)
 {      
@@ -261,35 +290,62 @@ struct wnd_container* find_button_to_click(GArray* windows, char *t[], size_t tl
     wnd = g_array_index(windows, struct wnd_container*, 0);
     mw = wnd->r.x1 / BTN_RATIO;
     mh = wnd->r.y1 / BTN_RATIO;
-    wnd = NULL; 
+    
+    /* Frame of desktop */
+    uint16_t w = wnd->r.x1;
+    uint16_t h =wnd->r.y1;
 
+    /* Keeping track of occupied screen locations with a bitmap */
+    size_t n = ((w + w % 8) / 8) * h;
+    uint8_t map[n];
+    memset(map, 0, sizeof(uint8_t) * n);
+    
     size_t l = windows->len;
-    printf("Searching clickable button\n");
+    
     for (size_t i = 0; i < l; i++)
     {   
-        wnd = g_array_index(windows, struct wnd_container*, l - (i + 1));
-        printf("Size: %d x %d\n", wnd->r.w,  wnd->r.h);
+        wnd = g_array_index(windows, struct wnd_container*, l - (i+1));
+        
         /* Performs filtering based on size */
         if(wnd->r.w > mw || wnd->r.h > mh)
+        {
+            update_visibility_bitmask(map, n, &wnd->r); 
             continue; 
+        }
 
-        /* Performs filtering based on Class */ 
+        /* TODO: Performs filtering based on Class eventually */ 
 
         /* Checks, if a target text is in the window's text is */
         for(size_t j = 0; j < tlen; j++)
         {
-            printf("%s - %s\n", wnd->text, t[j]);
             if (wnd->text && strstr(wnd->text, t[j]) != NULL)
             {   
-                printf("Found matching button text\n");
+                printf("Found matching button text - s\n", wnd->text);
                 cand = wnd; 
                 break;  
             }
         }
+        
+        if(!cand)
+        {
+            /* Update visibility */
+            update_visibility_bitmask(map, n, &wnd->r); 
+            continue; 
+        }
 
-        if(cand)
+        /* Checks visibility of candidate btn */
+        struct rect_container* r = get_visible_rect(map, n, &cand->r);
+        
+        if(r)
+        {   
+            cand->r = *r; 
             break; 
+        }
+        else
+            /* Reset candidate */
+            cand = NULL; 
     }
+
     if (cand)
     {
         btn = (struct wnd_container *)malloc(sizeof(struct wnd_container));
@@ -329,14 +385,15 @@ int draw_windows(vmi_instance_t vmi, GArray* windows)
     // TODO retrieve buttons to click here
     char *btn_texts[2] = {"Agree\0", "OK\0"}; 
 
-    struct wnd_container* btn = find_button_to_click(windows, btn_texts, ARRAY_SIZE(btn_texts)); 
+    struct wnd_container* btn = find_button_to_click(windows, btn_texts, ARRAY_SIZE(btn_texts));
+
     if(btn)
     {
         printf("Found clickable button \"%s\" at (%d, %d)", btn->text, btn->r.x0, btn->r.y0);
-    }
-    
+
     gfx_color(255, 0, 0);
     gfx_rect(btn->r.x0, btn->r.y0, btn->r.w, btn->r.h);
+    }
 
     char c = '\0';
     while (1)
