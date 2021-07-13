@@ -240,7 +240,51 @@ status_t draw_single_window(vmi_instance_t vmi, addr_t win, vmi_pid_t pid)
 
 struct rect_container* get_visible_rect(uint8_t* map, size_t n, struct rect_container* r)
 {   
-    return NULL;    
+    struct rect_container* result = NULL;
+
+    int byte, bit_idx;
+    unsigned int bit; 
+    int x0 = -1, x1 = -1, y0 = -1, y1 = -1; 
+    
+    for(int x = r->x0; x < r->x1; x++)
+    {
+        for(int y = r->y0; y < r->y1; y++)
+        {   
+
+            byte = x / 8 * y; 
+
+            /* Parts of a wnd can be outside of the desktop's frame */
+            if(byte < n)
+            {
+                bit_idx = x % 8;
+                bit = 0x80 >> bit_idx; 
+                if(!(map[byte] & bit))
+                {
+                    if(x0 == -1 && y0 == -1)
+                    {
+                        x0 = x;
+                        y0 = y; 
+                    }
+
+                    x1 = x;
+                    y1 = y;     
+                }
+            }
+        }
+    }
+    
+    if (x0 != -1 && x0 != -1)
+    {
+        result = (struct rect_container*) malloc(sizeof(struct rect_container));
+        result->x0 = x0; 
+        result->x1 = x1;
+        result->y0 = y0; 
+        result->y1 = y1; 
+        result->w = x1 -x0;
+        result->h = y1 - y0;
+    }
+
+    return result;    
 }
 /* 
  * Naive assumption, that buttons will be 8 times smaller than the respective
@@ -259,9 +303,7 @@ void update_visibility_bitmask(uint8_t* map, size_t n, struct rect_container* r)
         {   
 
             byte = x / 8 * y; 
-            //printf(" %d,%d -- %d\n", x, y, byte); 
-            //fflush(stdout);
-            
+
             /* Parts of a wnd can be outside of the desktop's frame */
             if(byte < n)
             {
@@ -276,8 +318,14 @@ void update_visibility_bitmask(uint8_t* map, size_t n, struct rect_container* r)
 struct wnd_container* find_button_to_click(GArray* windows, char *t[], size_t tlen)
 {      
     uint16_t mw, mh; 
+    /* Current window */
     struct wnd_container* wnd = NULL; 
-    struct wnd_container* cand = NULL; 
+    /* Candidate window */
+    struct wnd_container* cand = NULL;
+    /* Visibile part of candidate */
+    struct rect_container* r = NULL; 
+
+    /* Resulting button with updated rect */
     struct wnd_container* btn = NULL; 
 
     if (!windows)
@@ -320,7 +368,7 @@ struct wnd_container* find_button_to_click(GArray* windows, char *t[], size_t tl
         {
             if (wnd->text && strstr(wnd->text, t[j]) != NULL)
             {   
-                printf("Found matching button text - s\n", wnd->text);
+                printf("Found matching button text - %s\n", wnd->text);
                 cand = wnd; 
                 break;  
             }
@@ -334,15 +382,12 @@ struct wnd_container* find_button_to_click(GArray* windows, char *t[], size_t tl
         }
 
         /* Checks visibility of candidate btn */
-        struct rect_container* r = get_visible_rect(map, n, &cand->r);
+        r = get_visible_rect(map, n, &cand->r);
         
         if(r)
-        {   
-            cand->r = *r; 
             break; 
-        }
         else
-            /* Reset candidate */
+            /* Not visible at all, reset candidate */
             cand = NULL; 
     }
 
@@ -350,6 +395,7 @@ struct wnd_container* find_button_to_click(GArray* windows, char *t[], size_t tl
     {
         btn = (struct wnd_container *)malloc(sizeof(struct wnd_container));
         memcpy(btn, cand, sizeof(struct wnd_container));
+        btn->r = *r; 
     }
     return btn; 
 }
