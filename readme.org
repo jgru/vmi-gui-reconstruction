@@ -19,7 +19,7 @@ This tools reconstructs each desktop, that could be found in the memory of a run
 Please make sure to install those libaries and then run ~make~ from within this directory.
 
 ** Usage
-To use this PoC determine the Xen domain identifier of the Win 7 VM in question and run the compiled binary as illustrated below:
+To use this tool determine the Xen domain identifier of the Win 7 VM in question and run the compiled binary as illustrated below:
 
 #+BEGIN_SRC shell
 # Set name of the VM specified in its config file
@@ -39,7 +39,7 @@ sudo ./vmi-reconstruct-gui -d $DOM_ID -k $KRN_IST_FILE -w $W32K_IST_FILE
 #+END_SRC
 
 Per default only the so-called desktop named /Default/ of /WinSta0/ of session #1 is shown.
-To show all desktops -- regardless, if empty or not -- use the CLI-flag ~--all~.
+To show all desktops -- regardless, if they are empty or not -- use the CLI-flag ~--all~.
 
 A full example with the more explicit CLI-options (long opts) looks like this:
 #+BEGIN_SRC shell
