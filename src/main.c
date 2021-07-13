@@ -91,10 +91,13 @@ struct winsta_container
 
 struct rect_container
 {
-    uint32_t x0;
-    uint32_t x1;
-    uint32_t y0;
-    uint32_t y1;
+    uint16_t x0;
+    uint16_t x1;
+    uint16_t y0;
+    uint16_t y1;
+    /* For convenience */
+    uint16_t w;
+    uint16_t h;
 };
 
 struct wnd_container
@@ -108,7 +111,6 @@ struct wnd_container
     struct rect_container rclient;
     const char* text;
 };
-
 
 int sort_wnd_container(gconstpointer a, gconstpointer b)
 {
@@ -125,25 +127,23 @@ void draw_single_wnd_container(struct wnd_container* w)
         !(w->style & WS_MINIMIZE) &&
         !(w->exstyle & WS_EX_TRANSPARENT))
     {
-        int width = w->r.x1 - w->r.x0;
-        int height = w->r.y1 - w->r.y0;
 
         gfx_color(80 * w->level, 80 * w->level, 80 * w->level);
-        gfx_fill_rect(w->r.x0, w->r.y0, width, height);
+        gfx_fill_rect(w->r.x0, w->r.y0, w->r.w, w->r.h);
 
         gfx_color(0, 0, 0);
-        gfx_rect(w->r.x0, w->r.y0, width, height);
+        gfx_rect(w->r.x0, w->r.y0, w->r.w, w->r.h);
 
         gfx_color(85 * w->level, 85 * w->level, 85 * w->level);
-        gfx_fill_rect(w->rclient.x0, w->rclient.y0, w->rclient.x1 - w->rclient.x0, w->rclient.y1 - w->rclient.y0);
+        gfx_fill_rect(w->rclient.x0, w->rclient.y0, w->rclient.w, w->rclient.h);
 
         gfx_color(0, 0, 0);
-        gfx_rect(w->rclient.x0, w->rclient.y0, w->rclient.x1 - w->rclient.x0, w->rclient.y1 - w->rclient.y0);
+        gfx_rect(w->rclient.x0, w->rclient.y0, w->rclient.w, w->rclient.h);
 
         if (w->text)
         {
-            if (width > 0)
-                gfx_draw_str_multiline(w->r.x0 + TEXT_OFFSET, w->r.y0, w->text, strlen(w->text), width);
+            if (w->r.w > 0)
+                gfx_draw_str_multiline(w->r.x0 + TEXT_OFFSET, w->r.y0, w->text, strlen(w->text), w->r.w);
             else
                 gfx_draw_str(w->r.x0 + TEXT_OFFSET, w->r.y0, w->text, strlen(w->text));
         }
@@ -238,6 +238,66 @@ status_t draw_single_window(vmi_instance_t vmi, addr_t win, vmi_pid_t pid)
     return ret;
 }
 
+/* 
+ * Naive assumption, that buttons will be 8 times smaller than the respective
+ * desktop dimension 
+ */
+#define BTN_RATIO 4
+
+struct wnd_container* find_button_to_click(GArray* windows, char *t[], size_t tlen)
+{      
+    uint16_t mw, mh; 
+    struct wnd_container* wnd = NULL; 
+    struct wnd_container* cand = NULL; 
+    struct wnd_container* btn = NULL; 
+
+    if (!windows)
+        return NULL;
+
+    /* 
+     * Naive assumption, that buttons will be 8 times smaller than the respective
+     * desktop dimension 
+     */
+    wnd = g_array_index(windows, struct wnd_container*, 0);
+    mw = wnd->r.x1 / BTN_RATIO;
+    mh = wnd->r.y1 / BTN_RATIO;
+    wnd = NULL; 
+
+    size_t l = windows->len;
+    printf("Searching clickable button\n");
+    for (size_t i = 0; i < l; i++)
+    {   
+        wnd = g_array_index(windows, struct wnd_container*, l - (i + 1));
+        printf("Size: %d x %d\n", wnd->r.w,  wnd->r.h);
+        /* Performs filtering based on size */
+        if(wnd->r.w > mw || wnd->r.h > mh)
+            continue; 
+
+        /* Performs filtering based on Class */ 
+
+        /* Checks, if a target text is in the window's text is */
+        for(size_t j = 0; j < tlen; j++)
+        {
+            printf("%s - %s\n", wnd->text, t[j]);
+            if (wnd->text && strstr(wnd->text, t[j]) != NULL)
+            {   
+                printf("Found matching button text\n");
+                cand = wnd; 
+                break;  
+            }
+        }
+
+        if(cand)
+            break; 
+    }
+    if (cand)
+    {
+        btn = (struct wnd_container *)malloc(sizeof(struct wnd_container));
+        memcpy(btn, cand, sizeof(struct wnd_container));
+    }
+    return btn; 
+}
+
 int draw_windows(vmi_instance_t vmi, GArray* windows)
 {
     struct wnd_container* wnd;
@@ -265,6 +325,18 @@ int draw_windows(vmi_instance_t vmi, GArray* windows)
         wnd = g_array_index(windows, struct wnd_container*, i);
         draw_single_wnd_container(wnd);
     }
+
+    // TODO retrieve buttons to click here
+    char *btn_texts[2] = {"Agree\0", "OK\0"}; 
+
+    struct wnd_container* btn = find_button_to_click(windows, btn_texts, ARRAY_SIZE(btn_texts)); 
+    if(btn)
+    {
+        printf("Found clickable button \"%s\" at (%d, %d)", btn->text, btn->r.x0, btn->r.y0);
+    }
+    
+    gfx_color(255, 0, 0);
+    gfx_rect(btn->r.x0, btn->r.y0, btn->r.w, btn->r.h);
 
     char c = '\0';
     while (1)
@@ -383,11 +455,15 @@ struct wnd_container* construct_wnd_container(vmi_instance_t vmi, vmi_pid_t pid,
     wc->r.x1 = x1;
     wc->r.y0 = y0;
     wc->r.y1 = y1;
+    wc->r.w = x1 - x0; 
+    wc->r.h = y1 - y0; 
 
-    wc->rclient.x0 = x0;
-    wc->rclient.x1 = x1;
-    wc->rclient.y0 = y0;
-    wc->rclient.y1 = y1;
+    wc->rclient.x0 = rx0;
+    wc->rclient.x1 = rx1;
+    wc->rclient.y0 = ry0;
+    wc->rclient.y1 = ry1;
+    wc->rclient.w = rx1 - rx0; 
+    wc->rclient.h = ry1 - ry0; 
 
     wc->style = style;
     wc->exstyle = exstyle;
@@ -874,7 +950,9 @@ GArray* find_first_active_desktop(vmi_instance_t vmi)
 
     return NULL;
 }
-status_t vmi_reconstruct_gui(uint64_t domid, const char* kernel_json, const char* win32k_json, bool is_show_all)
+
+status_t vmi_reconstruct_gui(uint64_t domid, const char *kernel_json,
+                             const char *win32k_json, bool is_show_all)
 {
     vmi_instance_t vmi = {0};
 
