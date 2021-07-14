@@ -46,12 +46,12 @@
 
 #define LEN_WIN_LIST 0x100
 
-// Window style
+/* Flags indicating window style */
 #define WS_MINIMIZE 0x20000000
 #define WS_VISIBLE 0x10000000
 #define WS_DISABLED 0x08000000
 
-// Window extended style (exstyle)
+/* Window extended style (exstyle) */
 #define WS_EX_DLGMODALFRAME 0x00000001
 #define WS_EX_NOPARENTNOTIFY 0x00000004
 #define WS_EX_TOPMOST 0x00000008
@@ -59,6 +59,9 @@
 #define WS_EX_TRANSPARENT 0x00000020
 
 #define TEXT_OFFSET 5
+
+/* Factor of desktop - button, used for simple filtering */
+#define BTN_RATIO 4
 
 /* Holds struct-offsets, needed to access relevant fields */
 extern struct Offsets off;
@@ -239,265 +242,174 @@ status_t draw_single_window(vmi_instance_t vmi, addr_t win, vmi_pid_t pid)
     return ret;
 }
 
-struct rect_container* get_visible_rect_from_bitmask(uint8_t* map, size_t n, struct rect_container* r)
-{   
+struct rect_container* get_visible_rect_from_bitmask(char* map, size_t n, int scanline, struct rect_container* r)
+{
     struct rect_container* result = NULL;
 
     int byte, bit_idx;
-    unsigned int bit; 
-    int x0 = -1, x1 = -1, y0 = -1, y1 = -1; 
-   // int lx0 = -1; 
-    int lx1 = -1;
-
-    for(int y = r->y0; y < r->y1; y++)
-    {
-        for(int x = r->x0; x < r->x1; x++)
-        {   
-
-            byte = x / 8 * y; 
-
-            /* Parts of a wnd can be outside of the desktop's frame */
-            if(byte < n)
-            {
-                bit_idx = x % 8;
-                bit = 0x80 >> bit_idx; 
-                
-                if(!(map[byte] & bit))
-                {   
-                    if(x0 == -1 && y0 == -1)
-                    {
-                        x0 = x;
-                        y0 = y; 
-                        //ly1 = y1; 
-                    }
-                
-                    if(x <= lx1 || lx1 == -1)
-                        x1 = x; 
-
-                    y1 = y;
-                }
-            }
-        }
-            lx1 = x1;
-    }
-    printf("%d\n", lx1);
-    if (x0 != -1 && x0 != -1)
-    {
-        result = (struct rect_container*) malloc(sizeof(struct rect_container));
-        result->x0 = x0; 
-        result->x1 = x1;
-        result->y0 = y0; 
-        result->y1 = y1; 
-        result->w = x1 -x0;
-        result->h = y1 - y0;
-    }
-
-    return result;    
-}
-/* 
- * Naive assumption, that buttons will be 8 times smaller than the respective
- * desktop dimension 
- */
-#define BTN_RATIO 4
-
-void update_visibility_bitmask(uint8_t* map, size_t n, struct rect_container* r)
-{   
-    int byte, bit_idx;
-    unsigned int bit; 
-
-    for(int x = r->x0; x < r->x1; x++)
-    {
-        for(int y = r->y0; y < r->y1; y++)
-        {   
-            //if(x < 0 || y < 0)
-
-            byte = x / 8 * y; 
-
-            /* Parts of a wnd can be outside of the desktop's frame */
-            if(byte < n)
-            {
-                bit_idx = x % 8;
-                bit = 0x80 >> bit_idx; 
-                map[byte] |= bit;
-            }
-        }
-    }
-}
-
-struct rect_container* get_visible_rect(uint8_t* map, size_t n, int scanline, struct rect_container* r)
-{   
-    struct rect_container* result = NULL;
-
-    int byte;
-    int x0 = -1, x1 = -1, y0 = -1, y1 = -1; 
-    //int ly1 = -1; 
-    int lx1 = -1;
+    unsigned int bit;
+    int x0 = -1, x1 = -1, y0 = -1, y1 = -1;
     bool is_y_hole = false;
-    for(int y = r->y0; y < r->y1; y++)
+    bool is_x_hole = false;
+
+    for (int y = r->y0; y < r->y1; y++)
     {
-        for(int x = r->x0; x < r->x1; x++)
-        {    
-            byte = y * scanline + x;
+        for (int x = r->x0; x < r->x1; x++)
+        {
+
+            byte = (y * scanline + x)/8;
+
             /* Parts of a wnd can be outside of the desktop's frame */
-            if(byte < n)
+            if (byte >= n || x < 0)
+                continue;
+
+            bit_idx = x % 8;
+            bit = 0x80 >> bit_idx;
+            if (!(map[byte] & bit))
             {
-                if(map[byte] != 255)
-                {   
-                    if(x0 == -1 && y0 == -1)
-                    {
-                        x0 = x;
-                        y0 = y; 
-                        //ly1 = y1;
-                    }
-
-                    if (x <= lx1 || lx1 == -1)
-                        x1 = x;
-                        
-                    if(!is_y_hole)
-                        y1 = y; 
-                    
+                if (x0 == -1 && y0 == -1)
+                {
+                    x0 = x;
+                    y0 = y;
                 }
-                else
-                    if(x == x0)
-                        is_y_hole = true;
-            }
-            //ly1 = y1;
-        }
-        lx1 = x1;
-    }
 
+                if (!is_x_hole)
+                    x1 = x;
+
+                if (!is_y_hole)
+                    y1 = y;
+            }
+            else
+            {
+                if (x == x0)
+                    is_y_hole = true;
+
+                if (y == y1)
+                    is_x_hole = true;
+            }
+        }
+    }
     if (x0 != -1 && x0 != -1)
     {
         result = (struct rect_container*) malloc(sizeof(struct rect_container));
-        result->x0 = x0; 
+        result->x0 = x0;
         result->x1 = x1;
-        result->y0 = y0; 
-        result->y1 = y1; 
-        result->w = x1 -x0;
+        result->y0 = y0;
+        result->y1 = y1;
+        result->w = x1 - x0;
         result->h = y1 - y0;
     }
 
-    return result;    
+    return result;
 }
 
-void update_visibility_mask(uint8_t* map, size_t n, int scanline, struct rect_container* r)
-{   
-    int byte;   
-    
-    for(int x = r->x0; x < r->x1; x++)
-    {
-        for(int y = r->y0; y < r->y1; y++)
-        {   
-            //if(x < 0 || y < 0)
+void update_visibility_bitmask(char* map, size_t n, int scanline, struct rect_container* r)
+{
+    int byte, bit_idx;
+    unsigned int bit;
 
-            byte = y * scanline + x; 
+    for (int y = r->y0; y < r->y1; y++)
+    {
+
+        for (int x = r->x0; x < r->x1; x++)
+        {
+            byte = (y * scanline + x)/8;
+
+            if (x < 0 || byte >= n )
+                continue;
 
             /* Parts of a wnd can be outside of the desktop's frame */
-            if(byte < n)
-            {
-                //bit_idx = x % 8;
-                //bit = 0x80 >> bit_idx; 
-                map[byte] = 255;
-            }
+            bit_idx = x % 8;
+            bit = 0x80 >> bit_idx;
+            map[byte] |= bit;
         }
     }
-    printf("%d - %d\n", r->x0, r->y0);
-    printf("%d - %d\n", r->x1-r->x0, r->y1-r->y0);
 }
 
-struct wnd_container* find_button_to_click(GArray* windows, char *t[], size_t tlen)
-{      
-    uint16_t mw, mh; 
+struct wnd_container* find_button_to_click(GArray* windows, char* t[], size_t tlen)
+{
+    uint16_t mw, mh;
     /* Current window */
-    struct wnd_container* wnd = NULL; 
+    struct wnd_container* wnd = NULL;
     /* Candidate window */
     struct wnd_container* cand = NULL;
     /* Visibile part of candidate */
-    struct rect_container* r = NULL; 
+    struct rect_container* r = NULL;
 
     /* Resulting button with updated rect */
-    struct wnd_container* btn = NULL; 
+    struct wnd_container* btn = NULL;
 
     if (!windows)
         return NULL;
 
-    /* 
-     * Naive assumption, that buttons will be 8 times smaller than the respective
-     * desktop dimension 
-     */
     wnd = g_array_index(windows, struct wnd_container*, 0);
-    
+
+    /*
+     * Naive assumption, that buttons will be BTN_RATIO times smaller than the
+     * respective desktop dimension
+     */
     mw = wnd->r.x1 / BTN_RATIO;
     mh = wnd->r.y1 / BTN_RATIO;
-    
+
     /* Frame of desktop */
     uint16_t w = wnd->r.x1;
     uint16_t h =wnd->r.y1;
 
     /* Keeping track of occupied screen locations with a bitmap */
-    /*
     size_t n = ((w + w % 8) / 8) * h;
-    uint8_t map[n];
-    memset(map, 0, sizeof(uint8_t) * n);
-    */
-    size_t n = w  * h;
-    uint8_t map[n];
-    memset(map, 0, sizeof(uint8_t) * n);
+    char map[n];
+    memset(map, 0, sizeof(char) * n);
 
     size_t l = windows->len;
-    
+
     for (size_t i = 0; i < l; i++)
-    {   
+    {
         wnd = g_array_index(windows, struct wnd_container*, l - (i+1));
-        
+
         /* Performs filtering based on size */
-        if(wnd->r.w > mw || wnd->r.h > mh)
-        {   
-            printf("Updating visibility mask: %s \n", wnd->text);
-            //update_visibility_bitmask(map, n, &wnd->r); 
-            update_visibility_mask(map, n, w, &wnd->r); 
-            continue; 
+        if (wnd->r.w > mw || wnd->r.h > mh)
+        {
+            update_visibility_bitmask(map, n, w, &wnd->r);
+            continue;
         }
 
-        /* TODO: Performs filtering based on Class eventually */ 
+        /* TODO: Performs filtering based on Class eventually */
 
         /* Checks, if a target text is in the window's text is */
-        for(size_t j = 0; j < tlen; j++)
+        for (size_t j = 0; j < tlen; j++)
         {
             if (wnd->text && strstr(wnd->text, t[j]) != NULL)
-            {   
+            {
                 printf("Found matching button text - %s\n", wnd->text);
-                cand = wnd; 
-                break;  
+                cand = wnd;
+                break;
             }
         }
-        
-        if(!cand)
+
+        if (!cand)
         {
             /* Update visibility */
-            //update_visibility_bitmask(map, n, &wnd->r); 
-            printf("Updating visibility mask: %s \n", wnd->text);
-            update_visibility_mask(map, n, w, &wnd->r); 
-            continue; 
+            update_visibility_bitmask(map, n, w, &wnd->r);
+            continue;
         }
 
         /* Checks visibility of candidate btn */
-        r = get_visible_rect(map, n, w, &cand->r);
-        
-        if(r)
-            break; 
+        r = get_visible_rect_from_bitmask(map, n, w, &cand->r);
+
+        if (r)
+            break;
         else
             /* Not visible at all, reset candidate */
-            cand = NULL; 
+            cand = NULL;
     }
 
     if (cand)
     {
-        btn = (struct wnd_container *)malloc(sizeof(struct wnd_container));
+        btn = (struct wnd_container*)malloc(sizeof(struct wnd_container));
         memcpy(btn, cand, sizeof(struct wnd_container));
-        btn->r = *r; 
+        btn->r = *r;
     }
-    return btn; 
+    return btn;
 }
 
 int draw_windows(vmi_instance_t vmi, GArray* windows)
@@ -529,11 +441,11 @@ int draw_windows(vmi_instance_t vmi, GArray* windows)
     }
 
     // TODO retrieve buttons to click here
-    char *btn_texts[2] = {"Agree\0", "OK\0"}; 
+    char* btn_texts[2] = {"Agree\0", "OK\0"};
 
     struct wnd_container* btn = find_button_to_click(windows, btn_texts, ARRAY_SIZE(btn_texts));
 
-    if(btn)
+    if (btn)
     {
         printf("Found clickable button \"%s\" at (%d, %d)", btn->text, btn->r.x0, btn->r.y0);
 
@@ -658,15 +570,15 @@ struct wnd_container* construct_wnd_container(vmi_instance_t vmi, vmi_pid_t pid,
     wc->r.x1 = x1;
     wc->r.y0 = y0;
     wc->r.y1 = y1;
-    wc->r.w = x1 - x0; 
-    wc->r.h = y1 - y0; 
+    wc->r.w = x1 - x0;
+    wc->r.h = y1 - y0;
 
     wc->rclient.x0 = rx0;
     wc->rclient.x1 = rx1;
     wc->rclient.y0 = ry0;
     wc->rclient.y1 = ry1;
-    wc->rclient.w = rx1 - rx0; 
-    wc->rclient.h = ry1 - ry0; 
+    wc->rclient.w = rx1 - rx0;
+    wc->rclient.h = ry1 - ry0;
 
     wc->style = style;
     wc->exstyle = exstyle;
@@ -1154,8 +1066,8 @@ GArray* find_first_active_desktop(vmi_instance_t vmi)
     return NULL;
 }
 
-status_t vmi_reconstruct_gui(uint64_t domid, const char *kernel_json,
-                             const char *win32k_json, bool is_show_all)
+status_t vmi_reconstruct_gui(uint64_t domid, const char* kernel_json,
+    const char* win32k_json, bool is_show_all)
 {
     vmi_instance_t vmi = {0};
 
