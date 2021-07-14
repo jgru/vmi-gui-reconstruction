@@ -91,10 +91,11 @@ struct winsta_container
 
 struct rect_container
 {
-    uint16_t x0;
-    uint16_t x1;
-    uint16_t y0;
-    uint16_t y1;
+    int16_t x0;
+    int16_t x1;
+    int16_t y0;
+    int16_t y1;
+
     /* For convenience */
     uint16_t w;
     uint16_t h;
@@ -238,17 +239,19 @@ status_t draw_single_window(vmi_instance_t vmi, addr_t win, vmi_pid_t pid)
     return ret;
 }
 
-struct rect_container* get_visible_rect(uint8_t* map, size_t n, struct rect_container* r)
+struct rect_container* get_visible_rect_from_bitmask(uint8_t* map, size_t n, struct rect_container* r)
 {   
     struct rect_container* result = NULL;
 
     int byte, bit_idx;
     unsigned int bit; 
     int x0 = -1, x1 = -1, y0 = -1, y1 = -1; 
-    
-    for(int x = r->x0; x < r->x1; x++)
+   // int lx0 = -1; 
+    int lx1 = -1;
+
+    for(int y = r->y0; y < r->y1; y++)
     {
-        for(int y = r->y0; y < r->y1; y++)
+        for(int x = r->x0; x < r->x1; x++)
         {   
 
             byte = x / 8 * y; 
@@ -258,21 +261,26 @@ struct rect_container* get_visible_rect(uint8_t* map, size_t n, struct rect_cont
             {
                 bit_idx = x % 8;
                 bit = 0x80 >> bit_idx; 
+                
                 if(!(map[byte] & bit))
-                {
+                {   
                     if(x0 == -1 && y0 == -1)
                     {
                         x0 = x;
                         y0 = y; 
+                        //ly1 = y1; 
                     }
+                
+                    if(x <= lx1 || lx1 == -1)
+                        x1 = x; 
 
-                    x1 = x;
-                    y1 = y;     
+                    y1 = y;
                 }
             }
         }
+            lx1 = x1;
     }
-    
+    printf("%d\n", lx1);
     if (x0 != -1 && x0 != -1)
     {
         result = (struct rect_container*) malloc(sizeof(struct rect_container));
@@ -301,6 +309,7 @@ void update_visibility_bitmask(uint8_t* map, size_t n, struct rect_container* r)
     {
         for(int y = r->y0; y < r->y1; y++)
         {   
+            //if(x < 0 || y < 0)
 
             byte = x / 8 * y; 
 
@@ -313,6 +322,87 @@ void update_visibility_bitmask(uint8_t* map, size_t n, struct rect_container* r)
             }
         }
     }
+}
+
+struct rect_container* get_visible_rect(uint8_t* map, size_t n, int scanline, struct rect_container* r)
+{   
+    struct rect_container* result = NULL;
+
+    int byte;
+    int x0 = -1, x1 = -1, y0 = -1, y1 = -1; 
+    //int ly1 = -1; 
+    int lx1 = -1;
+    bool is_y_hole = false;
+    for(int y = r->y0; y < r->y1; y++)
+    {
+        for(int x = r->x0; x < r->x1; x++)
+        {    
+            byte = y * scanline + x;
+            /* Parts of a wnd can be outside of the desktop's frame */
+            if(byte < n)
+            {
+                if(map[byte] != 255)
+                {   
+                    if(x0 == -1 && y0 == -1)
+                    {
+                        x0 = x;
+                        y0 = y; 
+                        //ly1 = y1;
+                    }
+
+                    if (x <= lx1 || lx1 == -1)
+                        x1 = x;
+                        
+                    if(!is_y_hole)
+                        y1 = y; 
+                    
+                }
+                else
+                    if(x == x0)
+                        is_y_hole = true;
+            }
+            //ly1 = y1;
+        }
+        lx1 = x1;
+    }
+
+    if (x0 != -1 && x0 != -1)
+    {
+        result = (struct rect_container*) malloc(sizeof(struct rect_container));
+        result->x0 = x0; 
+        result->x1 = x1;
+        result->y0 = y0; 
+        result->y1 = y1; 
+        result->w = x1 -x0;
+        result->h = y1 - y0;
+    }
+
+    return result;    
+}
+
+void update_visibility_mask(uint8_t* map, size_t n, int scanline, struct rect_container* r)
+{   
+    int byte;   
+    
+    for(int x = r->x0; x < r->x1; x++)
+    {
+        for(int y = r->y0; y < r->y1; y++)
+        {   
+            //if(x < 0 || y < 0)
+
+            byte = y * scanline + x; 
+
+            /* Parts of a wnd can be outside of the desktop's frame */
+            if(byte < n)
+            {
+                //bit_idx = x % 8;
+                //bit = 0x80 >> bit_idx; 
+                map[byte] = 255;
+            }
+        }
+    }
+    printf("%d - %d\n", r->x0, r->y0);
+    printf("%d - %d\n", r->x1-r->x0, r->y1-r->y0);
 }
 
 struct wnd_container* find_button_to_click(GArray* windows, char *t[], size_t tlen)
@@ -336,6 +426,7 @@ struct wnd_container* find_button_to_click(GArray* windows, char *t[], size_t tl
      * desktop dimension 
      */
     wnd = g_array_index(windows, struct wnd_container*, 0);
+    
     mw = wnd->r.x1 / BTN_RATIO;
     mh = wnd->r.y1 / BTN_RATIO;
     
@@ -344,10 +435,15 @@ struct wnd_container* find_button_to_click(GArray* windows, char *t[], size_t tl
     uint16_t h =wnd->r.y1;
 
     /* Keeping track of occupied screen locations with a bitmap */
+    /*
     size_t n = ((w + w % 8) / 8) * h;
     uint8_t map[n];
     memset(map, 0, sizeof(uint8_t) * n);
-    
+    */
+    size_t n = w  * h;
+    uint8_t map[n];
+    memset(map, 0, sizeof(uint8_t) * n);
+
     size_t l = windows->len;
     
     for (size_t i = 0; i < l; i++)
@@ -356,8 +452,10 @@ struct wnd_container* find_button_to_click(GArray* windows, char *t[], size_t tl
         
         /* Performs filtering based on size */
         if(wnd->r.w > mw || wnd->r.h > mh)
-        {
-            update_visibility_bitmask(map, n, &wnd->r); 
+        {   
+            printf("Updating visibility mask: %s \n", wnd->text);
+            //update_visibility_bitmask(map, n, &wnd->r); 
+            update_visibility_mask(map, n, w, &wnd->r); 
             continue; 
         }
 
@@ -377,12 +475,14 @@ struct wnd_container* find_button_to_click(GArray* windows, char *t[], size_t tl
         if(!cand)
         {
             /* Update visibility */
-            update_visibility_bitmask(map, n, &wnd->r); 
+            //update_visibility_bitmask(map, n, &wnd->r); 
+            printf("Updating visibility mask: %s \n", wnd->text);
+            update_visibility_mask(map, n, w, &wnd->r); 
             continue; 
         }
 
         /* Checks visibility of candidate btn */
-        r = get_visible_rect(map, n, &cand->r);
+        r = get_visible_rect(map, n, w, &cand->r);
         
         if(r)
             break; 
@@ -437,8 +537,8 @@ int draw_windows(vmi_instance_t vmi, GArray* windows)
     {
         printf("Found clickable button \"%s\" at (%d, %d)", btn->text, btn->r.x0, btn->r.y0);
 
-    gfx_color(255, 0, 0);
-    gfx_rect(btn->r.x0, btn->r.y0, btn->r.w, btn->r.h);
+        gfx_color(255, 0, 0);
+        gfx_rect(btn->r.x0, btn->r.y0, btn->r.w, btn->r.h);
     }
 
     char c = '\0';
