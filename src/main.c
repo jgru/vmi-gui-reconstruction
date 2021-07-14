@@ -71,15 +71,18 @@ extern struct Offsets off;
  * of reconstructing the GUI to a level, where dialogs could be identified for
  * clicking
  */
-struct winsta_container
+struct winsta
 {
     addr_t addr;
     /*
-     * For each GUI thread, win32k maps, the associated desktop heap into the user-­‐mode
-     * http://mista.nu/research/mandt-win32k-slides.pdf
+     * For each GUI thread, win32k maps, the associated desktop heap into the
+     * user-mode http://mista.nu/research/mandt-win32k-slides.pdf
      *
-     * Therefore do it like volatility: Find a process with matching sessionID and take its VA as _MM_SESSION_SPACE for the WinSta
-     * https://github.com/volatilityfoundation/volatility/blob/a438e768194a9e05eb4d9ee9338b881c0fa25937/volatility/plugins/gui/sessions.py#L49
+     * Therefore do it like volatility: Find a process with matching sessionID
+     * and take its VA as _MM_SESSION_SPACE for the WinSta
+     * https://github.com/volatilityfoundation/volatility/blob/\
+     * a438e768194a9e05eb4d9ee9338b881c0fa25937/volatility/plugins/\
+     * gui/sessions.py#L49
      *
      * To accomplish this, it's the most easy way to use vmi_read_xx_va
      */
@@ -92,7 +95,7 @@ struct winsta_container
     const char* name;
 };
 
-struct rect_container
+struct rect
 {
     int16_t x0;
     int16_t x1;
@@ -104,26 +107,26 @@ struct rect_container
     uint16_t h;
 };
 
-struct wnd_container
+struct wnd
 {
     addr_t spwnd_addr;
     uint32_t style;
     uint32_t exstyle;
     int level;
     uint16_t atom;
-    struct rect_container r;
-    struct rect_container rclient;
+    struct rect r;
+    struct rect rclient;
     const char* text;
 };
 
 int sort_wnd_container(gconstpointer a, gconstpointer b)
 {
     int res = 0;
-    res = ((struct wnd_container*)b)->level - ((struct wnd_container*)a)->level;
+    res = ((struct wnd*)b)->level - ((struct wnd*)a)->level;
     return res;
 }
 
-void draw_single_wnd_container(struct wnd_container* w)
+void draw_single_wnd_container(struct wnd* w)
 {
 
     if ((w->style & WS_VISIBLE) &&
@@ -147,7 +150,8 @@ void draw_single_wnd_container(struct wnd_container* w)
         if (w->text)
         {
             if (w->r.w > 0)
-                gfx_draw_str_multiline(w->r.x0 + TEXT_OFFSET, w->r.y0, w->text, strlen(w->text), w->r.w);
+                gfx_draw_str_multiline(w->r.x0 + TEXT_OFFSET, w->r.y0, w->text,
+                    strlen(w->text), w->r.w);
             else
                 gfx_draw_str(w->r.x0 + TEXT_OFFSET, w->r.y0, w->text, strlen(w->text));
         }
@@ -219,7 +223,9 @@ status_t draw_single_window(vmi_instance_t vmi, addr_t win, vmi_pid_t pid)
         {
             /*
              * Length is always 0, therefore always read 255 chars
-             * https://github.com/volatilityfoundation/volatility/blob/a438e768194a9e05eb4d9ee9338b881c0fa25937/volatility/plugins/gui/vtypes/win7_sp1_x86_vtypes_gui.py#L650
+             * https://github.com/volatilityfoundation/volatility/blob/\
+             * a438e768194a9e05eb4d9ee9338b881c0fa25937/volatility/plugins/\
+             * gui/vtypes/win7_sp1_x86_vtypes_gui.py#L650
              */
             wchar_t* wn = read_wchar_str_pid(vmi, str_name_off, (size_t)255, pid);
 
@@ -242,9 +248,10 @@ status_t draw_single_window(vmi_instance_t vmi, addr_t win, vmi_pid_t pid)
     return ret;
 }
 
-struct rect_container* get_visible_rect_from_bitmask(char* map, size_t n, int scanline, struct rect_container* r)
+struct rect* get_visible_rect_from_bitmask(
+    char* map, size_t n, int scanline, struct rect* r)
 {
-    struct rect_container* result = NULL;
+    struct rect* result = NULL;
 
     int byte, bit_idx;
     unsigned int bit;
@@ -291,7 +298,7 @@ struct rect_container* get_visible_rect_from_bitmask(char* map, size_t n, int sc
     }
     if (x0 != -1 && x0 != -1)
     {
-        result = (struct rect_container*) malloc(sizeof(struct rect_container));
+        result = (struct rect*) malloc(sizeof(struct rect));
         result->x0 = x0;
         result->x1 = x1;
         result->y0 = y0;
@@ -303,7 +310,8 @@ struct rect_container* get_visible_rect_from_bitmask(char* map, size_t n, int sc
     return result;
 }
 
-void update_visibility_bitmask(char* map, size_t n, int scanline, struct rect_container* r)
+void update_visibility_bitmask(char* map, size_t n, int scanline,
+    struct rect* r)
 {
     int byte, bit_idx;
     unsigned int bit;
@@ -326,23 +334,23 @@ void update_visibility_bitmask(char* map, size_t n, int scanline, struct rect_co
     }
 }
 
-struct wnd_container* find_button_to_click(GArray* windows, char* t[], size_t tlen)
+struct wnd* find_button_to_click(GArray* wins, char* t[], size_t tlen)
 {
     uint16_t mw, mh;
     /* Current window */
-    struct wnd_container* wnd = NULL;
+    struct wnd* wnd = NULL;
     /* Candidate window */
-    struct wnd_container* cand = NULL;
+    struct wnd* cand = NULL;
     /* Visibile part of candidate */
-    struct rect_container* r = NULL;
+    struct rect* r = NULL;
 
     /* Resulting button with updated rect */
-    struct wnd_container* btn = NULL;
+    struct wnd* btn = NULL;
 
-    if (!windows)
+    if (!wins)
         return NULL;
 
-    wnd = g_array_index(windows, struct wnd_container*, 0);
+    wnd = g_array_index(wins, struct wnd*, 0);
 
     /*
      * Naive assumption, that buttons will be BTN_RATIO times smaller than the
@@ -360,11 +368,11 @@ struct wnd_container* find_button_to_click(GArray* windows, char* t[], size_t tl
     char map[n];
     memset(map, 0, sizeof(char) * n);
 
-    size_t l = windows->len;
+    size_t l = wins->len;
 
     for (size_t i = 0; i < l; i++)
     {
-        wnd = g_array_index(windows, struct wnd_container*, l - (i+1));
+        wnd = g_array_index(wins, struct wnd*, l - (i+1));
 
         /* Performs filtering based on size */
         if (wnd->r.w > mw || wnd->r.h > mh)
@@ -405,8 +413,8 @@ struct wnd_container* find_button_to_click(GArray* windows, char* t[], size_t tl
 
     if (cand)
     {
-        btn = (struct wnd_container*)malloc(sizeof(struct wnd_container));
-        memcpy(btn, cand, sizeof(struct wnd_container));
+        btn = (struct wnd*)malloc(sizeof(struct wnd));
+        memcpy(btn, cand, sizeof(struct wnd));
         btn->r = *r;
     }
     return btn;
@@ -414,13 +422,13 @@ struct wnd_container* find_button_to_click(GArray* windows, char* t[], size_t tl
 
 int draw_windows(vmi_instance_t vmi, GArray* windows)
 {
-    struct wnd_container* wnd;
+    struct wnd* wnd;
     int w, h;
 
     if (!windows)
         return -1;
 
-    wnd = g_array_index(windows, struct wnd_container*, 0);
+    wnd = g_array_index(windows, struct wnd*, 0);
 
     if (!wnd)
         return -1;
@@ -436,14 +444,14 @@ int draw_windows(vmi_instance_t vmi, GArray* windows)
 
     for (size_t i = 0; i < windows->len; i++)
     {
-        wnd = g_array_index(windows, struct wnd_container*, i);
+        wnd = g_array_index(windows, struct wnd*, i);
         draw_single_wnd_container(wnd);
     }
 
     // TODO retrieve buttons to click here
     char* btn_texts[2] = {"Agree\0", "OK\0"};
 
-    struct wnd_container* btn = find_button_to_click(windows, btn_texts, ARRAY_SIZE(btn_texts));
+    struct wnd* btn = find_button_to_click(windows, btn_texts, ARRAY_SIZE(btn_texts));
 
     if (btn)
     {
@@ -497,7 +505,7 @@ bool is_wnd_visible(vmi_instance_t vmi, vmi_pid_t pid, addr_t wnd)
     return false;
 }
 
-struct wnd_container* construct_wnd_container(vmi_instance_t vmi, vmi_pid_t pid, addr_t win, int level)
+struct wnd* construct_wnd_container(vmi_instance_t vmi, vmi_pid_t pid, addr_t win, int level)
 {
     status_t ret = VMI_FAILURE;
 
@@ -563,8 +571,8 @@ struct wnd_container* construct_wnd_container(vmi_instance_t vmi, vmi_pid_t pid,
         return NULL;
 
     /* Populate struct, if no failure occured */
-    struct wnd_container* wc = (struct wnd_container*)malloc(sizeof(struct wnd_container));
-    memset(wc, 0, sizeof(struct wnd_container));
+    struct wnd* wc = (struct wnd*)malloc(sizeof(struct wnd));
+    memset(wc, 0, sizeof(struct wnd));
 
     wc->r.x0 = x0;
     wc->r.x1 = x1;
@@ -640,7 +648,7 @@ status_t traverse_windows_pid(vmi_instance_t vmi, addr_t* win,
         if (!is_wnd_visible(vmi, pid, *val))
             continue;
 
-        struct wnd_container* wc = construct_wnd_container(vmi, pid, *val, level);
+        struct wnd* wc = construct_wnd_container(vmi, pid, *val, level);
         g_array_append_val(result_windows, wc);
 
         addr_t* child = malloc(sizeof(uint64_t));
@@ -715,7 +723,7 @@ GArray* retrieve_windows_from_desktop(vmi_instance_t vmi, addr_t desktop, vmi_pi
     addr_t* root = malloc(sizeof(uint64_t));
     *root = spwnd;
 
-    GArray* result_windows = g_array_new(true, true, sizeof(struct wnd_container*));
+    GArray* result_windows = g_array_new(true, true, sizeof(struct wnd*));
     GHashTable* seen_windows = g_hash_table_new(g_int64_hash, g_int64_equal);
 
     traverse_windows_pid(vmi, root, pid, seen_windows, result_windows, 0);
@@ -758,7 +766,7 @@ status_t traverse_desktops(vmi_instance_t vmi, addr_t* desktops,
 }
 
 /* Reads relevant data from tagWINDOWSTATION-structs and the child tagDESKTOPs */
-status_t populate_winsta(vmi_instance_t vmi, struct winsta_container* winsta, addr_t addr, vmi_pid_t providing_pid)
+status_t populate_winsta(vmi_instance_t vmi, struct winsta* winsta, addr_t addr, vmi_pid_t providing_pid)
 {
     winsta->addr = addr;
 
@@ -826,10 +834,10 @@ status_t populate_winsta(vmi_instance_t vmi, struct winsta_container* winsta, ad
 }
 
 /* Iterates over process list an retrieves all tagWINDOWSTATIONS-structs */
-status_t retrieve_winstas_from_procs(vmi_instance_t vmi, struct winsta_container** winsta_ptr, size_t* len)
+status_t retrieve_winstas_from_procs(vmi_instance_t vmi, struct winsta** winsta_ptr, size_t* len)
 {
     size_t max_len = 0x100;
-    struct winsta_container winstas[max_len];
+    struct winsta winstas[max_len];
 
     addr_t cur_list_entry = off.ps_active_process_head;
     addr_t next_list_entry = 0;
@@ -964,7 +972,7 @@ status_t retrieve_winstas_from_procs(vmi_instance_t vmi, struct winsta_container
                 }
                 if (!is_known && i < max_len)
                 {
-                    struct winsta_container wc = {0};
+                    struct winsta wc = {0};
                     populate_winsta(vmi, &wc, cur_pwinsta, pid);
                     winstas[i] = wc;
                     winsta_count++;
@@ -1007,8 +1015,8 @@ next_thrd:
         }
     };
 
-    *winsta_ptr = (struct winsta_container*)malloc(winsta_count * sizeof(struct winsta_container));
-    memcpy(*winsta_ptr, winstas, winsta_count * sizeof(struct winsta_container));
+    *winsta_ptr = (struct winsta*)malloc(winsta_count * sizeof(struct winsta));
+    memcpy(*winsta_ptr, winstas, winsta_count * sizeof(struct winsta));
     *len = winsta_count;
 
     return VMI_SUCCESS;
@@ -1028,7 +1036,7 @@ void clean_up(vmi_instance_t vmi)
 GArray* find_first_active_desktop(vmi_instance_t vmi)
 {
     size_t len = 0;
-    struct winsta_container* winstas = NULL;
+    struct winsta* winstas = NULL;
     const char* desk_name = NULL;
 
     /* Gathers windows stations with all desktops by iterating over all procs */
@@ -1043,7 +1051,9 @@ GArray* find_first_active_desktop(vmi_instance_t vmi)
         if (winstas[i].session_id == 0)
             continue;
 
-        /* Discard with a name different than WinSta0 and non-interactive window stations */
+        /* Discard non-interactive window stations as well as window stations
+         * with a name other than "WinSta0"
+         */
         if (!winstas[i].is_interactive)
             continue;
 
@@ -1117,7 +1127,7 @@ status_t vmi_reconstruct_gui(uint64_t domid, const char* kernel_json,
     if (is_show_all)
     {
         size_t len = 0;
-        struct winsta_container* winstas = NULL;
+        struct winsta* winstas = NULL;
 
         /* Gathers windows stations with all desktops by iterating over all procs */
         if (VMI_FAILURE == retrieve_winstas_from_procs(vmi, &winstas, &len))
