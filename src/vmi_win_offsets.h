@@ -22,7 +22,7 @@
 #include <libvmi/libvmi.h>
 #include <libvmi/libvmi_extra.h>
 
-//#define DEBUG
+/* #define DEBUG_OFFSETS */
 
 /*
  * Flag in _OBJECT_HEADER InfoMask field, indicating the presence of the
@@ -238,7 +238,7 @@ status_t find_offsets_from_ntkrpamp_json(vmi_instance_t vmi, const char* kernel_
             off.thread_list_head_offset);
         return VMI_FAILURE;
     }
-#ifdef DEBUG
+#ifdef DEBUG_OFFSETS
     printf("Relevant _EPROCESS-offsets\n");
     printf("Offset for ActiveProcessLinks:\t%ld\n", off.active_proc_links_offset);
     printf("Offset for ImageFileName:\t%ld\n", off.name_offset);
@@ -261,7 +261,7 @@ status_t find_offsets_from_ntkrpamp_json(vmi_instance_t vmi, const char* kernel_
         printf("Error retrieving Tcb-offset : %ld\n", off.tcb_offset);
         return VMI_FAILURE;
     }
-#ifdef DEBUG
+#ifdef DEBUG_OFFSETS
     printf("\nRelevant _ETHREAD-offsets\n");
     printf("Offset for Tcb:\t%ld\n", off.tcb_offset);
     printf("Offset for ThreadListEntry:\t%ld\n", off.thread_list_entry_offset);
@@ -272,7 +272,7 @@ status_t find_offsets_from_ntkrpamp_json(vmi_instance_t vmi, const char* kernel_
         printf("Error retrieving TEB at offset %ld\n", off.tcb_offset);
         return VMI_FAILURE;
     }
-#ifdef DEBUG
+#ifdef DEBUG_OFFSETS
     printf("\nRelevant _KTHREAD-offsets\n");
     printf("Offset for Teb:\t%ld\n", off.teb_offset);
 #endif
@@ -337,7 +337,7 @@ status_t find_offsets_from_ntkrpamp_json(vmi_instance_t vmi, const char* kernel_
         printf("Error retrieving offset to Atom of _RTL_ATOM_TABLE_ENTRY\n");
         return VMI_FAILURE;
     }
-#ifdef DEBUG
+#ifdef DEBUG_OFFSETS
     printf("\nRelevant ATOM-offsets\n");
     printf("Offset for Buckets:\t%ld\n", off.atom_table_buckets_off);
     printf("Offset for NumBuckets:\t%ld\n", off.atom_table_num_buckets_off);
@@ -423,7 +423,7 @@ status_t find_offsets_from_win32k_json(vmi_instance_t vmi, const char* win32k_js
         fprintf(stderr, "Error reading offset to dwWSF_Flags from tagWINDOWSTATION\n");
         return VMI_FAILURE;
     }
-#ifdef DEBUG
+#ifdef DEBUG_OFFSETS
     printf("\nRelevant tagWINDOWSTATION-offsets\n");
     printf("Offset for dwSessionId:\t%ld\n", off.winsta_session_id_offset);
     printf("Offset for pGlobalAtomTable:\t%ld\n", off.winsta_pglobal_atom_table_offset);
@@ -474,7 +474,7 @@ status_t find_offsets_from_win32k_json(vmi_instance_t vmi, const char* win32k_js
         fprintf(stderr, "Error reading offset to dwDesktopId from tagDESKTOP\n");
         return VMI_FAILURE;
     }
-#ifdef DEBUG
+#ifdef DEBUG_OFFSETS
     printf("\nRelevant tagDESKTOP-offsets\n");
     printf("Offset for pDeskInfo:\t%ld\n", off.desk_pdeskinfo_off);
     printf("Offset for rpdeskNext:\t%ld\n", off.desk_rpdesk_next_off);
