@@ -96,6 +96,8 @@ You can retrieve those two values, by utilizing a utility [[https://github.com/C
 #+begin_src shell
 # Get drakpdb.py
 wget https://raw.githubusercontent.com/CERT-Polska/drakvuf-sandbox/master/drakrun/drakrun/drakpdb.py
+# Install dependencies
+pip3 install pdbparse tqdm
 
 # Get the GUID and age from the file in question
 python3 drakpdb.py pdb_guid --file ~/share/win32k.sys
