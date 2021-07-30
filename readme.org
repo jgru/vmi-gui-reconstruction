@@ -47,7 +47,7 @@ sudo ./vmi-reconstruct-gui --all --domid $DOM_ID \
     --kernel $KRN_IST_FILE --win32k $W32K_IST_FILE
 #+END_SRC
 
-For information on the creation of the referenced intermediate symbo table-files, see section "Excursus: Derivation of IST-files" below.
+For information on the creation of the referenced intermediate symbol table-files, see section "Excursus: Derivation of IST-files" below.
 
 ** Background on the working of the tool
 The Windows GUI subsystem is structured by the concepts of sessions, window stations, desktops and windows. A session is the logon-environment of a user. Each session has multiple window stations -- interactive ones for handling user input and non-interactive ones for services. Each window station has a so-called atom table, which is basically a hashtable of strings and a notable attribute in the context of GUI forensics. The atom entries are shared by processes and -- among other things -- used to track classes of GUI objects.
