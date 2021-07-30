@@ -117,7 +117,7 @@ To generate a IST-file in Rekalls' format, you can use the following commands:
 # Use the GUID age to retrieve the PDB-file from Microsoft's symbol servers
 python3 drakpdb.py fetch_pdb --pdb_name win32k.pdb --guid_age 6a1a499eed2d42d29e40866f0c374d492
 
-# Generate an intermediate symbol file from the retrieve PDB-file
+# Generate an intermediate symbol file from the retrieved PDB-file
 python3 drakpdb.py parse_pdb --pdb_name win32k.pdb > win32k.json
 #+end_src
 
