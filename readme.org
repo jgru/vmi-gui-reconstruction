@@ -66,7 +66,7 @@ To find all Window Stations (WinStas), traverse the linked list of ~_EPROCESS~-s
    1. If current ~_ETHREAD~ is a GUI-thread, retrieve pointer ~pwinsta~ to ~tagWINDOWSTATION~-struct
    2. If current ~_ETHREAD~ is not a GUI-thread, continue
 **** Parsing of window stations
-To parse each tagWINDOWSTATION-struct, do
+To parse each ~tagWINDOWSTATION~-struct, do
 1. Retrieve session ID
 2. Retrieve offset to ~_RTL_ATOM_TABLE~ and parse it (not detailed here)
 3. Retrieve flags (specifying, if interactive or not)
@@ -79,7 +79,7 @@ To get a list of all windows associated with a desktop in their Z-order (bottom 
    1. Find ~_DESKTOPINFO~
    2. Find ~spwnd~ (struct pointer to the first ~tagWND~-struct)
 2. Allocate an empty list of windows
-3. Form a list of top windows by following pNextWindow of the ~tagWND~-struct until NULL or seen
+3. Form a list of top windows by following ~pNextWindow~ of the ~tagWND~-struct until NULL or seen
    1. Check the visibility of each window (~WS_VISIBLE~-flag has to be set)
       - If not visible, continue
       - If visible, add to list of visible windows
