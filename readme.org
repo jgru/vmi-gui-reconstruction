@@ -63,7 +63,7 @@ To find all Window Stations (WinStas), traverse the linked list of ~_EPROCESS~-s
 1. Find ThreadListHead
 2. Traverse linked list of ~_ETHREAD~-structs and check, if current ~_ETHREAD~ is a GUI thread.
    This is done by using the ~TEB~-struct in ~_KTHREAD~, which houses a Win32ThreadInfo-struct, if it is a GUI thread
-   1. If current ~_ETHREAD~ is a GUI-thread, retrieve pointer pwinsta to tagWINDOWSTATION-struct
+   1. If current ~_ETHREAD~ is a GUI-thread, retrieve pointer ~pwinsta~ to ~tagWINDOWSTATION~-struct
    2. If current ~_ETHREAD~ is not a GUI-thread, continue
 **** Parsing of window stations
 To parse each tagWINDOWSTATION-struct, do
